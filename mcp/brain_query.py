@@ -7,8 +7,25 @@ repo's wiki). The MCP server (server.py) is a thin wrapper over this.
 from __future__ import annotations
 
 import json
+import re
 import urllib.request
 from pathlib import Path
+
+
+def _hay_words(hay: str) -> list[str]:
+    return re.findall(r"[a-z0-9_]+", hay)
+
+
+def _token_matches(tok: str, hay: str, words: list[str]) -> bool:
+    """True if tok appears in hay, including simple singular/plural variants."""
+    if tok in hay:
+        return True
+    for w in words:
+        if tok == w:
+            return True
+        if tok in (w + "s", w + "es") or w in (tok + "s", tok + "es"):
+            return True
+    return False
 
 
 class Brain:
@@ -51,16 +68,35 @@ class Brain:
         }
 
     def search(self, query: str, limit: int = 12) -> list[dict]:
-        q = query.lower()
-        out = []
+        """Match nodes whose id/title/intent contain every query token (AND).
+
+        Single-token queries behave as before (substring match). Multi-word queries
+        like "custom aliases" match when each token appears somewhere in the haystack,
+        so "custom alias" in intent matches even though the plural differs.
+        """
+        tokens = [t for t in query.lower().split() if t]
+        if not tokens:
+            return []
+
+        scored: list[tuple[int, dict]] = []
         for n in self.nodes:
             hay = " ".join(str(x) for x in (n["id"], n.get("title"), n.get("intent"))).lower()
-            if q in hay:
-                out.append({"id": n["id"], "type": n["type"],
-                            "title": n.get("title"), "intent": n.get("intent")})
-            if len(out) >= limit:
-                break
-        return out
+            words = _hay_words(hay)
+            if not all(_token_matches(tok, hay, words) for tok in tokens):
+                continue
+            # Prefer title hits, then id, so the most relevant entities rank first.
+            title = (n.get("title") or "").lower()
+            title_words = _hay_words(title)
+            score = sum(2 if _token_matches(tok, title, title_words) else 1 for tok in tokens)
+            scored.append((score, {
+                "id": n["id"],
+                "type": n["type"],
+                "title": n.get("title"),
+                "intent": n.get("intent"),
+            }))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [hit for _, hit in scored[:limit]]
 
     def get_entity(self, node_id: str) -> dict:
         node = next((n for n in self.nodes if n["id"] == node_id), None)

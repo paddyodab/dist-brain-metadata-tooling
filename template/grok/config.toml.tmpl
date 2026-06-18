@@ -1,0 +1,12 @@
+# Distributed-brain MCP — agent depth surface over graph.json
+# Replace OWNER and REPO with your consumer repo (the one whose wiki materializes).
+# Or set DIST_BRAIN_GRAPH to a local path after running materialize.py.
+
+[mcp_servers.dist-brain]
+command = "DIST_BRAIN_TOOLING_VENV_PYTHON"
+args = ["DIST_BRAIN_TOOLING_MCP_SERVER"]
+enabled = true
+startup_timeout_sec = 15
+
+[mcp_servers.dist-brain.env]
+DIST_BRAIN_GRAPH = "https://raw.githubusercontent.com/wiki/OWNER/REPO/graph.json"

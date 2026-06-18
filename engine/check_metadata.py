@@ -17,75 +17,16 @@ from __future__ import annotations
 import argparse
 import ast
 import os
-import re
 from pathlib import Path
 
+from contract_lib import (
+    documented_params,
+    parse_tags,
+    raised_types,
+    returns_value,
+    signature_params,
+)
 from flags_registry import load_flags
-
-TAG_RE = re.compile(r"@(\w+)\b")
-
-
-def parse_tags(docstring: str) -> dict[str, list[str]]:
-    tags: dict[str, list[str]] = {}
-    current = None
-    buffer: list[str] = []
-
-    def flush() -> None:
-        nonlocal buffer
-        if current is not None:
-            tags.setdefault(current, []).append(" ".join(buffer).strip())
-        buffer = []
-
-    for raw in docstring.splitlines():
-        line = raw.strip()
-        m = TAG_RE.match(line)
-        if m:
-            flush()
-            current = m.group(1)
-            buffer = [line[m.end():].strip()]
-        elif current is not None:
-            buffer.append(line)
-    flush()
-    return tags
-
-
-def signature_params(fn) -> set[str]:
-    a = fn.args
-    names = [arg.arg for arg in (a.posonlyargs + a.args + a.kwonlyargs)]
-    if a.vararg:
-        names.append(a.vararg.arg)
-    if a.kwarg:
-        names.append(a.kwarg.arg)
-    return {n for n in names if n not in ("self", "cls")}
-
-
-def documented_params(tags) -> set[str]:
-    return {e.split()[0].rstrip(":") for e in tags.get("param", []) if e.split()}
-
-
-def raised_types(fn) -> set[str]:
-    types: set[str] = set()
-    for node in ast.walk(fn):
-        if isinstance(node, ast.Raise) and node.exc is not None:
-            exc = node.exc
-            if isinstance(exc, ast.Call):
-                exc = exc.func
-            if isinstance(exc, ast.Name):
-                types.add(exc.id)
-            elif isinstance(exc, ast.Attribute):
-                types.add(exc.attr)
-    return types
-
-
-def returns_value(fn) -> bool:
-    if fn.returns is not None:
-        ann = fn.returns
-        if isinstance(ann, ast.Constant) and ann.value is None:
-            return False
-        if isinstance(ann, ast.Name) and ann.id == "None":
-            return False
-        return True
-    return any(isinstance(n, ast.Return) and n.value is not None for n in ast.walk(fn))
 
 
 def check_file(path: Path, root: Path, known_flags: set[str]) -> list[str]:

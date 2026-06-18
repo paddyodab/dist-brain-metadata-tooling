@@ -2,7 +2,7 @@ name: "dist-brain metadata tooling"
 description: "Gate colocated metadata, or materialize it into a GitHub wiki."
 inputs:
   mode:
-    description: "gate | materialize | tags"
+    description: "gate | materialize | tags | verify"
     required: true
   src:
     description: "source dir, relative to the consumer repo root"
@@ -36,6 +36,14 @@ runs:
           --root "$GITHUB_WORKSPACE" \
           --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
           --flags "$GITHUB_WORKSPACE/${{ inputs.flags }}"
+    - name: Contract verification stubs (must be up to date)
+      if: inputs.mode == 'verify'
+      shell: bash
+      run: |
+        python3 "$GITHUB_ACTION_PATH/engine/generate_verification.py" \
+          --root "$GITHUB_WORKSPACE" \
+          --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
+          --check
     - name: IaC required-tags gate
       if: inputs.mode == 'tags'
       shell: bash

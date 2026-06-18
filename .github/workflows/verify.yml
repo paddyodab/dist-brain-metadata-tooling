@@ -1,0 +1,20 @@
+name: brain-verify
+
+# Reusable workflow: contract verification stubs must match @intent/@raises.
+on:
+  workflow_call:
+    inputs:
+      src:
+        type: string
+        default: "src"
+        required: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: paddyodab/dist-brain-metadata-tooling@v1
+        with:
+          mode: verify
+          src: ${{ inputs.src }}

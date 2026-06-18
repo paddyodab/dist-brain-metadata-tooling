@@ -20,9 +20,9 @@ For every public function you add or change:
 
 ## Capture it at plan time, not after
 
-Use **`/feature`** (`.claude/commands/feature.md`). The plan you and the agent
-agree on *is* the intent — write it as contracts, approve the contracts, implement
-to them. Reconstructing intent after the fact is how it drifts.
+Use **`/feature`** (Grok: `.grok/skills/feature/`, Claude: `.claude/commands/feature.md`).
+The plan you and the agent agree on *is* the intent — write it as contracts, approve
+the contracts, implement to them. Reconstructing intent after the fact is how it drifts.
 
 ## Decisions go in `decisions/`
 

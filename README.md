@@ -97,7 +97,30 @@ exposes the `graph.json` as query tools: `overview`, `search`, `get_entity`,
 pip install -r mcp/requirements.txt
 ```
 
-Register it with Claude Code, pointing at a repo's wiki `graph.json`:
+**Grok Build** (preferred) — project-scoped `.grok/config.toml` (installed by `init.sh`
+when you pass `<owner>/<repo>`), or add manually:
+
+```toml
+[mcp_servers.dist-brain]
+command = "/abs/path/to/dist-brain-metadata-tooling/.venv/bin/python3"
+args = ["/abs/path/to/dist-brain-metadata-tooling/mcp/server.py"]
+enabled = true
+
+[mcp_servers.dist-brain.env]
+DIST_BRAIN_GRAPH = "https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json"
+```
+
+Or via CLI:
+
+```bash
+grok mcp add dist-brain \
+  -e DIST_BRAIN_GRAPH=https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json \
+  --scope project \
+  -- /abs/path/to/dist-brain-metadata-tooling/.venv/bin/python3 \
+     /abs/path/to/dist-brain-metadata-tooling/mcp/server.py
+```
+
+**Claude Code** (legacy):
 
 ```bash
 claude mcp add dist-brain -s project \
@@ -105,29 +128,43 @@ claude mcp add dist-brain -s project \
   -- python3 /abs/path/to/mcp/server.py
 ```
 
-…or the equivalent project-scoped `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "dist-brain": {
-      "command": "python3",
-      "args": ["/abs/path/to/mcp/server.py"],
-      "env": { "DIST_BRAIN_GRAPH": "https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json" }
-    }
-  }
-}
-```
-
 `DIST_BRAIN_GRAPH` also accepts a local path (e.g. `brain/graph.json`). The server
 reloads per call, so it always reflects the latest published graph.
 
-## Authoring kit (`/feature`, `/infra`, `/learning`)
+## Authoring kit (`/feature`, `/infra`, `/learning`, `/freshness-review`)
 
-`init.sh` installs three Claude Code commands:
-- **`/feature`** — contract-first capture: turn the agreed plan into metadata contracts, then implement to them.
-- **`/infra`** — contract-first IaC: the agent **asks for the required tags + intent** before writing any CloudFormation/Terraform resource (so you don't forget), then verifies with the tags gate.
-- **`/learning`** — route a learning by half-life: how-to → code/IaC, claim → test, decision → ADR, volatile fact → pointer (never a rotting wiki).
+`init.sh` installs **Grok skills** (preferred) and Claude commands (legacy):
+
+| Skill | What it does |
+|---|---|
+| **`/feature`** | Contract-first capture: plan → metadata contracts → implement to them |
+| **`/infra`** | Contract-first IaC: ask for required tags + intent before writing resources |
+| **`/learning`** | Route a learning by half-life: how-to → code, claim → test, decision → ADR, volatile → pointer |
+| **`/freshness-review`** | Tier-2 semantic gate: does prose intent still match the code? |
+| **`/dist-brain`** | Query the materialized brain via MCP (`overview`, `search`, `get_entity`, …) |
+| **`/verification`** | Contract → pytest loop — the checkpoint for long-running agent work |
+
+```bash
+# skills only
+./init.sh ../your-repo
+
+# skills + .grok/config.toml for the repo's wiki brain
+./init.sh ../your-repo <owner>/<repo-with-wiki>
+```
+
+## Contract verification (long-running agent checkpoint)
+
+`engine/generate_verification.py` turns `@raises` / `@returns` contracts into
+`tests/generated/test_contract_verification.py`. CI can enforce stubs stay in sync:
+
+```yaml
+verify:
+  uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/verify.yml@v1
+```
+
+The `/feature` → `/verification` loop: approve contracts → implement → regenerate
+stubs → pytest green. That's the oracle for goal/loop sessions — not "I think I'm
+done," but gates + tests pass.
 
 ## Materialization includes IaC
 

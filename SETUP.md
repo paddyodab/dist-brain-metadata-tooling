@@ -102,19 +102,39 @@ Give agents the *depth* surface over the brain (`search` / `get_entity` /
 `neighbors` / `list_decisions` / `overview`):
 
 ```bash
-pip install -r dist-brain-metadata-tooling/mcp/requirements.txt
+cd dist-brain-metadata-tooling
+python3 -m venv .venv
+.venv/bin/pip install -r mcp/requirements.txt
 ```
 
-Point it at the wiki's raw `graph.json` and register it with Claude Code (project
-scope writes `.mcp.json`):
+### Grok Build (preferred)
+
+If you ran `init.sh <repo> <owner>/<repo>`, `.grok/config.toml` is already in place.
+Otherwise add it manually (see README) or:
+
+```bash
+grok mcp add dist-brain \
+  -e DIST_BRAIN_GRAPH=https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json \
+  --scope project \
+  -- /abs/path/to/dist-brain-metadata-tooling/.venv/bin/python3 \
+     /abs/path/to/dist-brain-metadata-tooling/mcp/server.py
+```
+
+Verify: `grok mcp doctor dist-brain` (from the consumer repo directory).
+
+**Enable in the TUI:** config `enabled = true` is not enough for an already-running
+session. Open `/mcps`, press `r` to refresh, select `dist-brain`, press **Space**
+to enable. Or start `/new` after adding the server. Prefer **user scope**
+(`~/.grok/config.toml`) over project `.grok/config.toml` unless you've trusted the
+project — project-scoped stdio MCP can show as disabled when `Project trusted: no`.
+
+### Claude Code (legacy)
 
 ```bash
 claude mcp add dist-brain -s project \
   -e DIST_BRAIN_GRAPH=https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json \
   -- python3 /abs/path/to/dist-brain-metadata-tooling/mcp/server.py
 ```
-
-See the README's "Agent projection" section for the equivalent `.mcp.json`.
 
 ---
 
