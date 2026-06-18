@@ -12,11 +12,12 @@ product repo carries config + a thin workflow instead of copy-pasting the engine
 
 - **`action.yml`** — a composite action (`mode: gate | materialize`).
 - **`engine/`** — the scripts (`check_metadata.py`, `extract.py`, `materialize.py`,
-  `flags_registry.py`, `publish_wiki.sh`). They analyze a target repo via `--root`
-  (default `$GITHUB_WORKSPACE`), so the engine's location is decoupled from the
-  repo it inspects.
-- **`.github/workflows/gate.yml`, `wiki.yml`** — `workflow_call` reusable workflows.
-- **`template/` + `init.sh`** — the authoring kit (`/feature`, CONTRIBUTING, PR template).
+  `check_tags.py`, `flags_registry.py`, `publish_wiki.sh`). They analyze a target
+  repo via `--root` (default `$GITHUB_WORKSPACE`), so the engine's location is
+  decoupled from the repo it inspects.
+- **`.github/workflows/gate.yml`, `wiki.yml`, `tags.yml`** — `workflow_call` reusable workflows.
+- **`template/` + `init.sh`** — the authoring kit (`/feature`, `/learning`, CONTRIBUTING, PR template).
+- **`examples/iac/`** — a CloudFormation + Terraform sample with a `tag-policy.yml`.
 - **`mcp/`** — an MCP server exposing the brain as agent query tools.
 
 **New here? See [`SETUP.md`](SETUP.md)** for the full step-by-step (incl. the manual wiki-init and PAT steps).
@@ -52,9 +53,23 @@ jobs:
       wiki-token: ${{ secrets.WIKI_TOKEN }}
 ```
 
+**3. (IaC) Enforce required tags** — if the repo has CloudFormation/Terraform, add a
+`tag-policy.yml` (required tag keys) and:
+
+```yaml
+# tags.yml — fail the PR when a taggable resource is missing a required tag
+on: [pull_request, push]
+jobs:
+  tags:
+    uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/tags.yml@v1
+```
+
+No-ops cleanly if there's no `tag-policy.yml`. See `examples/iac/`.
+
 That's the whole adoption: the engine is never copied into the product repo.
 
-**Inputs** (both workflows): `src` (default `src`), `flags` (default `flags.yml`).
+**Inputs:** gate/wiki take `src` (default `src`), `flags` (default `flags.yml`); tags
+takes `iac` (dir to scan, default whole repo) and `tag-policy` (default `tag-policy.yml`).
 
 ## Prerequisites (consumer repo)
 
@@ -107,7 +122,15 @@ claude mcp add dist-brain -s project \
 `DIST_BRAIN_GRAPH` also accepts a local path (e.g. `brain/graph.json`). The server
 reloads per call, so it always reflects the latest published graph.
 
+## Authoring kit (`/feature`, `/learning`)
+
+`init.sh` installs two Claude Code commands. **`/feature`** is contract-first
+capture (turn the agreed plan into metadata contracts, then implement to them).
+**`/learning`** triages a learning by half-life and routes it to a self-maintaining
+home — a how-to → code/IaC, a claim → a test, a decision → an ADR, a volatile fact
+→ a pointer (never a rotting wiki).
+
 ## Roadmap
 
-- **`/feature` as a Claude Code plugin** (vs. copy-in).
-- **Learnings** routing (promote how-tos to code/tests, rationale to ADRs).
+- **`/feature` + `/learning` as a Claude Code plugin** (vs. copy-in).
+- **IaC materialization** — project the infra inventory + tags + intent into the wiki.

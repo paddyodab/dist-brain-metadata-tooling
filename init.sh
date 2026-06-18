@@ -8,11 +8,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$TARGET/.claude/commands" "$TARGET/.github"
 cp "$HERE/template/feature.md"               "$TARGET/.claude/commands/feature.md"
+cp "$HERE/template/learning.md"              "$TARGET/.claude/commands/learning.md"
 cp "$HERE/template/CONTRIBUTING.md"          "$TARGET/CONTRIBUTING.md"
 cp "$HERE/template/pull_request_template.md" "$TARGET/.github/pull_request_template.md"
 
 echo "Installed authoring kit into $TARGET:"
-echo "  .claude/commands/feature.md   (/feature)"
+echo "  .claude/commands/feature.md   (/feature — contract-first capture)"
+echo "  .claude/commands/learning.md  (/learning — route-by-half-life triage)"
 echo "  CONTRIBUTING.md               (metadata Definition of Done)"
 echo "  .github/pull_request_template.md"
 echo

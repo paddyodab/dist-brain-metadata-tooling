@@ -1,0 +1,8 @@
+# The IaC "contract": the minimal tag set every taggable resource must carry.
+# This is the thing teams get flagged for missing (cost allocation, ownership,
+# environment). The gate fails the build when a resource is missing any of these.
+required_tags:
+  - Owner
+  - Environment
+  - CostCenter
+  - Service

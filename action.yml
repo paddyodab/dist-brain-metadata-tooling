@@ -2,7 +2,7 @@ name: "dist-brain metadata tooling"
 description: "Gate colocated metadata, or materialize it into a GitHub wiki."
 inputs:
   mode:
-    description: "gate | materialize"
+    description: "gate | materialize | tags"
     required: true
   src:
     description: "source dir, relative to the consumer repo root"
@@ -10,6 +10,12 @@ inputs:
   flags:
     description: "flags registry file, relative to the consumer repo root"
     default: "flags.yml"
+  iac:
+    description: "IaC dir to scan in tags mode, relative to the repo root (default: whole repo)"
+    default: ""
+  tag-policy:
+    description: "tag policy file in tags mode, relative to the repo root"
+    default: "tag-policy.yml"
   wiki-repo:
     description: "owner/repo whose wiki to publish to (materialize mode)"
     default: ${{ github.repository }}
@@ -30,6 +36,14 @@ runs:
           --root "$GITHUB_WORKSPACE" \
           --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
           --flags "$GITHUB_WORKSPACE/${{ inputs.flags }}"
+    - name: IaC required-tags gate
+      if: inputs.mode == 'tags'
+      shell: bash
+      run: |
+        pip install --quiet pyyaml
+        ARGS=(--root "$GITHUB_WORKSPACE" --policy "$GITHUB_WORKSPACE/${{ inputs.tag-policy }}")
+        if [ -n "${{ inputs.iac }}" ]; then ARGS+=(--iac "$GITHUB_WORKSPACE/${{ inputs.iac }}"); fi
+        python3 "$GITHUB_ACTION_PATH/engine/check_tags.py" "${ARGS[@]}"
     - name: Materialize + publish to wiki
       if: inputs.mode == 'materialize'
       shell: bash

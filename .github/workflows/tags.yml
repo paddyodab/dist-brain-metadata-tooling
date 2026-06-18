@@ -1,0 +1,29 @@
+name: brain-tags
+
+# Reusable workflow: IaC required-tags gate. A consumer calls it with:
+#   jobs:
+#     tags:
+#       uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/tags.yml@v1
+# No-ops cleanly if the repo has no tag-policy.yml.
+on:
+  workflow_call:
+    inputs:
+      iac:
+        type: string
+        default: ""
+        required: false
+      tag-policy:
+        type: string
+        default: "tag-policy.yml"
+        required: false
+
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: paddyodab/dist-brain-metadata-tooling@v1
+        with:
+          mode: tags
+          iac: ${{ inputs.iac }}
+          tag-policy: ${{ inputs.tag-policy }}

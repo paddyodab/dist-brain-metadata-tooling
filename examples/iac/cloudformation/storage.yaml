@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Storage stack for the widget service — owned by platform-team.
+
+Resources:
+  WidgetBucket:
+    Type: AWS::S3::Bucket
+    # @intent durable object storage for widget uploads; versioned, private.
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-widgets'
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Owner
+          Value: platform-team
+        - Key: Environment
+          Value: prod
+        - Key: CostCenter
+          Value: cc-1234
+        - Key: Service
+          Value: widget
+
+  WidgetQueue:
+    Type: AWS::SQS::Queue
+    # @intent buffers widget-processing jobs between the API and workers.
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-widget-jobs'
+      Tags:
+        - Key: Owner
+          Value: platform-team
+        - Key: Environment
+          Value: prod
+        - Key: CostCenter
+          Value: cc-1234
+        - Key: Service
+          Value: widget
