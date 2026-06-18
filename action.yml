@@ -54,6 +54,7 @@ runs:
           echo "wiki-token not provided — skipping wiki publish."
           exit 0
         fi
+        pip install --quiet pyyaml   # for IaC (CloudFormation) materialization
         chmod +x "$GITHUB_ACTION_PATH/engine/publish_wiki.sh"
         "$GITHUB_ACTION_PATH/engine/publish_wiki.sh" \
           "${{ inputs.wiki-repo }}" "${{ inputs.wiki-token }}" "$GITHUB_WORKSPACE" \

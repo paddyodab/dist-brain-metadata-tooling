@@ -37,7 +37,35 @@ def extract(root: Path, src, flags) -> tuple[list[dict], list[dict]]:
         cmd += ["--flags", str(flags)]
     out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
     data = json.loads(out[out.find("{"):])
-    return data["nodes"], data["edges"]
+    nodes, edges = data["nodes"], data["edges"]
+    # IaC resources (best-effort; never block the code materialization on it)
+    try:
+        iac = subprocess.run(["python3", str(ENGINE / "extract_iac.py"), "--root", str(root)],
+                             capture_output=True, text=True, check=True).stdout
+        idata = json.loads(iac[iac.find("{"):])
+        nodes += idata["nodes"]
+        edges += idata["edges"]
+    except Exception as e:
+        print(f"  ! IaC extraction skipped: {e.__class__.__name__}")
+    return nodes, edges
+
+
+def required_tags(root: Path) -> list[str]:
+    f = root / "tag-policy.yml"
+    if not f.exists():
+        return []
+    out, in_block = [], False
+    for line in f.read_text().splitlines():
+        s = line.strip()
+        if s.startswith("required_tags:"):
+            in_block = True
+            continue
+        if in_block:
+            if s.startswith("- "):
+                out.append(s[2:].strip())
+            elif s and not s.startswith("#") and not line.startswith((" ", "\t")):
+                break
+    return out
 
 
 def page_name(subsystem: str) -> str:
@@ -105,6 +133,8 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
     entities = [n for n in nodes if n["type"] in ("function", "method")]
     flags = [n for n in nodes if n["type"] == "flag"]
     decisions = [n for n in nodes if n["type"] == "decision"]
+    resources = [n for n in nodes if n["type"] == "resource"]
+    req_tags = required_tags(root)
     gated_by: dict[str, list[str]] = {}
     for e in edges:
         if e["type"] == "gated-by":
@@ -175,6 +205,23 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
                    f"- _source:_ `{d['provenance']['source_path']}`", ""]
     (brain / "Decisions.md").write_text("\n".join(dlines) + foot)
 
+    # Infrastructure.md — IaC inventory + tag coverage (only if there is IaC)
+    if resources:
+        il = ["# Infrastructure", "",
+              "IaC resources, their intent, and tag coverage against `tag-policy.yml`.", ""]
+        for r in sorted(resources, key=lambda x: x["id"]):
+            rf = r["facts"]
+            tags = rf.get("tags") or {}
+            missing = [k for k in req_tags if k not in tags]
+            cov = "✓ all required tags" if not missing else f"🚩 missing {missing}"
+            tagstr = ", ".join(f"{k}={v}" for k, v in sorted(tags.items())) or "—"
+            il += [f"## `{r['title']}`", "", r.get("intent") or "_(no intent)_", "",
+                   f"- **iac:** {rf.get('iac')} · `{rf.get('resource_type')}`",
+                   f"- **tags:** {tagstr}",
+                   f"- **tag coverage:** {cov}",
+                   f"- _source:_ `{r['provenance']['source_path']}` · `{r['provenance']['source_sha']}`", ""]
+        (brain / "Infrastructure.md").write_text("\n".join(il) + foot)
+
     # agent-context.md — the AGENT projection: everything in one token-dense read.
     ag = [f"# Agent context — generated from `{sha}` · {stamp}", "",
           "Read this first. Everything an agent needs about this repo: architecture, every "
@@ -209,6 +256,16 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
         ag.append(f"- `{d['id']}` — {d['title']} — {d['facts'].get('status') or ''}")
         if d.get("intent"):
             ag.append(f"    {d['intent']}")
+    if resources:
+        ag += ["", "## Infrastructure", ""]
+        for r in sorted(resources, key=lambda x: x["id"]):
+            rf = r["facts"]
+            tags = rf.get("tags") or {}
+            missing = [k for k in req_tags if k not in tags]
+            tagstr = ", ".join(f"{k}={v}" for k, v in sorted(tags.items())) or "—"
+            ag.append(f"- `{r['id']}` ({rf.get('iac')}/{rf.get('resource_type')}) — "
+                      f"{r.get('intent') or '(no intent)'}")
+            ag.append(f"    tags: {tagstr}" + (f" · MISSING {missing}" if missing else ""))
     (brain / "agent-context.md").write_text("\n".join(ag) + foot)
 
     hlines = ["# knowledge wiki", "",
@@ -224,15 +281,19 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
     for fl in sorted(flags, key=lambda x: x["title"]):
         feature, page = runbook_link[fl["id"]]
         hlines.append(f"- [Runbook: {feature}]({page}) — operate the {feature} feature")
-    hlines += ["- [Decisions](Decisions) — architecture decision records (the *why*)",
-               "- [Changelog](Changelog) — what changed, and why",
+    hlines += ["- [Decisions](Decisions) — architecture decision records (the *why*)"]
+    if resources:
+        hlines.append(f"- [Infrastructure](Infrastructure) — {len(resources)} IaC resources + tag coverage")
+    hlines += ["- [Changelog](Changelog) — what changed, and why",
                "- [Agent context](agent-context) — single-file context for AI agents", ""]
     (brain / "Home.md").write_text("\n".join(hlines) + foot)
 
     side = ["### 🧠 knowledge wiki", "", "[Home](Home)", "", "**Modules**"]
     side += [f"- [{page_name(s)}]({page_name(s)})" for s in sorted(subsystems)]
-    side += ["", "**Operations**", "- [Features](Features)", "- [Decisions](Decisions)",
-             "- [Changelog](Changelog)", "- [Agent context](agent-context)", "", "**Runbooks**"]
+    side += ["", "**Operations**", "- [Features](Features)", "- [Decisions](Decisions)"]
+    if resources:
+        side.append("- [Infrastructure](Infrastructure)")
+    side += ["- [Changelog](Changelog)", "- [Agent context](agent-context)", "", "**Runbooks**"]
     side += [f"- [{runbook_link[fl['id']][0]}]({runbook_link[fl['id']][1]})"
              for fl in sorted(flags, key=lambda x: x["title"])]
     (brain / "_Sidebar.md").write_text("\n".join(side) + "\n")

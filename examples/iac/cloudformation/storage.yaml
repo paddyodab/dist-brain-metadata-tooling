@@ -4,7 +4,8 @@ Description: Storage stack for the widget service — owned by platform-team.
 Resources:
   WidgetBucket:
     Type: AWS::S3::Bucket
-    # @intent durable object storage for widget uploads; versioned, private.
+    Metadata:
+      Intent: Durable object storage for widget uploads; versioned, private.
     Properties:
       BucketName: !Sub '${AWS::StackName}-widgets'
       VersioningConfiguration:
@@ -21,7 +22,8 @@ Resources:
 
   WidgetQueue:
     Type: AWS::SQS::Queue
-    # @intent buffers widget-processing jobs between the API and workers.
+    Metadata:
+      Intent: Buffers widget-processing jobs between the API and workers.
     Properties:
       QueueName: !Sub '${AWS::StackName}-widget-jobs'
       Tags:

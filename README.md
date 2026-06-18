@@ -122,15 +122,20 @@ claude mcp add dist-brain -s project \
 `DIST_BRAIN_GRAPH` also accepts a local path (e.g. `brain/graph.json`). The server
 reloads per call, so it always reflects the latest published graph.
 
-## Authoring kit (`/feature`, `/learning`)
+## Authoring kit (`/feature`, `/infra`, `/learning`)
 
-`init.sh` installs two Claude Code commands. **`/feature`** is contract-first
-capture (turn the agreed plan into metadata contracts, then implement to them).
-**`/learning`** triages a learning by half-life and routes it to a self-maintaining
-home — a how-to → code/IaC, a claim → a test, a decision → an ADR, a volatile fact
-→ a pointer (never a rotting wiki).
+`init.sh` installs three Claude Code commands:
+- **`/feature`** — contract-first capture: turn the agreed plan into metadata contracts, then implement to them.
+- **`/infra`** — contract-first IaC: the agent **asks for the required tags + intent** before writing any CloudFormation/Terraform resource (so you don't forget), then verifies with the tags gate.
+- **`/learning`** — route a learning by half-life: how-to → code/IaC, claim → test, decision → ADR, volatile fact → pointer (never a rotting wiki).
+
+## Materialization includes IaC
+
+When a repo has IaC, the materializer projects an **Infrastructure** wiki page and
+an agent-context section: each CloudFormation/Terraform resource with its intent,
+its tags, and tag coverage against `tag-policy.yml`. Resources also land in
+`graph.json`, so the MCP server can query them.
 
 ## Roadmap
 
-- **`/feature` + `/learning` as a Claude Code plugin** (vs. copy-in).
-- **IaC materialization** — project the infra inventory + tags + intent into the wiki.
+- **`/feature` + `/infra` + `/learning` as a Claude Code plugin** (vs. copy-in).
