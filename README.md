@@ -17,6 +17,9 @@ product repo carries config + a thin workflow instead of copy-pasting the engine
   repo it inspects.
 - **`.github/workflows/gate.yml`, `wiki.yml`** — `workflow_call` reusable workflows.
 - **`template/` + `init.sh`** — the authoring kit (`/feature`, CONTRIBUTING, PR template).
+- **`mcp/`** — an MCP server exposing the brain as agent query tools.
+
+**New here? See [`SETUP.md`](SETUP.md)** for the full step-by-step (incl. the manual wiki-init and PAT steps).
 
 ## Use it in a consumer repo
 
@@ -67,11 +70,44 @@ python3 engine/check_metadata.py --root ../your-repo      # gate
 python3 engine/materialize.py    --root ../your-repo --brain /tmp/brain   # render
 ```
 
+## Agent projection (MCP server)
+
+The wiki is the *human* projection (browse). The **agent** projection is two parts:
+the breadth surface is `agent-context.md` in the wiki (one token-dense read with
+everything, incl. ADRs); the depth surface is the **MCP server** in `mcp/`, which
+exposes the `graph.json` as query tools: `overview`, `search`, `get_entity`,
+`neighbors`, `list_decisions`.
+
+```bash
+pip install -r mcp/requirements.txt
+```
+
+Register it with Claude Code, pointing at a repo's wiki `graph.json`:
+
+```bash
+claude mcp add dist-brain -s project \
+  -e DIST_BRAIN_GRAPH=https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json \
+  -- python3 /abs/path/to/mcp/server.py
+```
+
+…or the equivalent project-scoped `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dist-brain": {
+      "command": "python3",
+      "args": ["/abs/path/to/mcp/server.py"],
+      "env": { "DIST_BRAIN_GRAPH": "https://raw.githubusercontent.com/wiki/<owner>/<repo>/graph.json" }
+    }
+  }
+}
+```
+
+`DIST_BRAIN_GRAPH` also accepts a local path (e.g. `brain/graph.json`). The server
+reloads per call, so it always reflects the latest published graph.
+
 ## Roadmap
 
-- **Agent projection** — alongside the human wiki, emit an agent read model: a
-  token-dense context bundle (`llms.txt`-style) + a queryable surface over
-  `graph.json` (`search`/`get_entity`/`neighbors`), eventually an MCP server. The
-  graph is already produced; this shapes it for the *retrieve* access pattern.
 - **`/feature` as a Claude Code plugin** (vs. copy-in).
 - **Learnings** routing (promote how-tos to code/tests, rationale to ADRs).
