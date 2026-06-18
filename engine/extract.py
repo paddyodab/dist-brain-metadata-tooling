@@ -118,6 +118,52 @@ def extract_file(path: Path, root: Path) -> tuple[list[dict], list[dict]]:
     return nodes, edges
 
 
+def adr_summary(text: str) -> str:
+    """First paragraph under '## Decision', else the first paragraph after the title."""
+    lines = text.splitlines()
+    for marker in ("## Decision", "##Decision"):
+        if marker in text:
+            i = next(k for k, l in enumerate(lines) if l.strip().startswith(marker))
+            para: list[str] = []
+            for l in lines[i + 1:]:
+                if l.strip().startswith("#"):
+                    break
+                if l.strip():
+                    para.append(l.strip())
+                elif para:
+                    break
+            if para:
+                return " ".join(para)
+    for l in lines:
+        s = l.strip()
+        if s and not s.startswith("#") and not s.startswith("**Status"):
+            return s
+    return ""
+
+
+def adr_nodes(root: Path) -> list[dict]:
+    """Ingest decisions/*.md (ADRs) as decision nodes — the cross-cutting 'why'."""
+    d = root / "decisions"
+    out: list[dict] = []
+    if not d.exists():
+        return out
+    for f in sorted(d.glob("*.md")):
+        text = f.read_text()
+        title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), f.stem)
+        status = next((l.split("**Status:**", 1)[1].strip()
+                       for l in text.splitlines() if "**Status:**" in l), None)
+        out.append({
+            "id": f"decision:{f.stem}", "type": "decision", "title": title,
+            "intent": adr_summary(text),
+            "facts": {"status": status},
+            "subsystem": "decisions",
+            "provenance": {"source_path": str(f.relative_to(root)),
+                           "source_sha": hashlib.sha1(text.encode()).hexdigest()[:12],
+                           "status": "verified", "extracted_by": "adr@1"},
+        })
+    return out
+
+
 def flag_nodes(flags_path: Path) -> list[dict]:
     out = []
     for name, meta in load_flags(flags_path).items():
@@ -145,7 +191,7 @@ def main() -> int:
     src_root = Path(args.src).resolve() if args.src else root / "src"
     flags_path = Path(args.flags).resolve() if args.flags else root / "flags.yml"
 
-    nodes = list(flag_nodes(flags_path))
+    nodes = list(flag_nodes(flags_path)) + adr_nodes(root)
     edges: list[dict] = []
     for f in sorted(src_root.rglob("*.py")):
         n, e = extract_file(f, root)

@@ -104,6 +104,7 @@ def feature_of(flag_node, gated) -> str:
 def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
     entities = [n for n in nodes if n["type"] in ("function", "method")]
     flags = [n for n in nodes if n["type"] == "flag"]
+    decisions = [n for n in nodes if n["type"] == "decision"]
     gated_by: dict[str, list[str]] = {}
     for e in edges:
         if e["type"] == "gated-by":
@@ -164,6 +165,52 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
         flines.append("")
     (brain / "Features.md").write_text("\n".join(flines) + foot)
 
+    # Decisions.md — ADRs (cross-cutting 'why'), human view
+    dlines = ["# Decisions", "", "Architecture decision records — the cross-cutting *why*.", ""]
+    for d in sorted(decisions, key=lambda x: x["id"]):
+        dlines += [f"## {d['title']}", "",
+                   f"- **status:** {d['facts'].get('status') or '—'}",
+                   f"- **id:** `{d['id']}`", "",
+                   d.get("intent") or "",
+                   f"- _source:_ `{d['provenance']['source_path']}`", ""]
+    (brain / "Decisions.md").write_text("\n".join(dlines) + foot)
+
+    # agent-context.md — the AGENT projection: everything in one token-dense read.
+    ag = [f"# Agent context — generated from `{sha}` · {stamp}", "",
+          "Read this first. Everything an agent needs about this repo: architecture, every "
+          "function's contract, feature flags, runbooks, and decisions. IDs are stable "
+          "(`path#symbol`, `flag:*`, `decision:*`) — cite them. `status` is verified|inferred. "
+          "The full graph (nodes + edges) is in `graph.json` beside this file — query it for "
+          "`raises` / `gated-by` neighbors.", "",
+          f"counts: entities={len(entities)} · flags={len(flags)} · decisions={len(decisions)}", "",
+          "## Functions", ""]
+    for sub in sorted(subsystems):
+        ag.append(f"### module: {page_name(sub)}")
+        for n in sorted(subsystems[sub], key=lambda x: x["title"]):
+            f = n["facts"]
+            gate = f" · flag:{f['flag']}" if f.get("flag") else ""
+            ag.append(f"- `{n['id']}` — {n.get('intent') or '(no intent)'}")
+            ag.append(f"    params({', '.join(f['params']) or '—'}) -> {f['returns'] or 'None'}; "
+                      f"raises: {', '.join(f['raises']) or '—'}{gate}; {n['provenance']['status']}")
+        ag.append("")
+    ag += ["## Flags", ""]
+    for fl in sorted(flags, key=lambda x: x["title"]):
+        ff = fl["facts"]
+        gates = ", ".join(e.split("#")[-1] for e in gated_by.get(fl["id"], [])) or "—"
+        ag.append(f"- `{fl['id']}` — default={ff.get('default')}, owner={ff.get('owner') or '—'} "
+                  f"— gates: {gates} — {fl.get('intent') or ''}")
+    ag += ["", "## Runbooks", ""]
+    for fl in sorted(flags, key=lambda x: x["title"]):
+        feature, page = runbook_link[fl["id"]]
+        ag.append(f"- {feature}: to toggle flip `{fl['title']}` "
+                  f"(default {fl['facts'].get('default')}); see [{page}]({page})")
+    ag += ["", "## Decisions (ADRs)", ""]
+    for d in sorted(decisions, key=lambda x: x["id"]):
+        ag.append(f"- `{d['id']}` — {d['title']} — {d['facts'].get('status') or ''}")
+        if d.get("intent"):
+            ag.append(f"    {d['intent']}")
+    (brain / "agent-context.md").write_text("\n".join(ag) + foot)
+
     hlines = ["# knowledge wiki", "",
               "_Auto-generated from the source on every merge to `main`. Derived read model;"
               " edits here are overwritten._", "",
@@ -177,12 +224,15 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
     for fl in sorted(flags, key=lambda x: x["title"]):
         feature, page = runbook_link[fl["id"]]
         hlines.append(f"- [Runbook: {feature}]({page}) — operate the {feature} feature")
-    hlines += ["- [Changelog](Changelog) — what changed, and why", ""]
+    hlines += ["- [Decisions](Decisions) — architecture decision records (the *why*)",
+               "- [Changelog](Changelog) — what changed, and why",
+               "- [Agent context](agent-context) — single-file context for AI agents", ""]
     (brain / "Home.md").write_text("\n".join(hlines) + foot)
 
     side = ["### 🧠 knowledge wiki", "", "[Home](Home)", "", "**Modules**"]
     side += [f"- [{page_name(s)}]({page_name(s)})" for s in sorted(subsystems)]
-    side += ["", "**Operations**", "- [Features](Features)", "- [Changelog](Changelog)", "", "**Runbooks**"]
+    side += ["", "**Operations**", "- [Features](Features)", "- [Decisions](Decisions)",
+             "- [Changelog](Changelog)", "- [Agent context](agent-context)", "", "**Runbooks**"]
     side += [f"- [{runbook_link[fl['id']][0]}]({runbook_link[fl['id']][1]})"
              for fl in sorted(flags, key=lambda x: x["title"])]
     (brain / "_Sidebar.md").write_text("\n".join(side) + "\n")
