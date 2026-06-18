@@ -159,7 +159,7 @@ reloads per call, so it always reflects the latest published graph.
 
 ```yaml
 verify:
-  uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/verify.yml@v1
+  uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/verify.yml@v1.5
 ```
 
 The `/feature` → `/verification` loop: approve contracts → implement → regenerate

@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: paddyodab/dist-brain-metadata-tooling@v1
+      - uses: paddyodab/dist-brain-metadata-tooling@v1.5
         with:
           mode: verify
           src: ${{ inputs.src }}
