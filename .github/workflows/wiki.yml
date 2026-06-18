@@ -1,0 +1,43 @@
+name: brain-wiki
+
+# Reusable workflow: gate, then materialize the brain into the caller's wiki.
+# A consumer calls it with:
+#   jobs:
+#     wiki:
+#       uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/wiki.yml@v1
+#       secrets:
+#         wiki-token: ${{ secrets.WIKI_TOKEN }}
+on:
+  workflow_call:
+    inputs:
+      src:
+        type: string
+        default: "src"
+        required: false
+      flags:
+        type: string
+        default: "flags.yml"
+        required: false
+    secrets:
+      wiki-token:
+        required: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate
+        uses: paddyodab/dist-brain-metadata-tooling@v1
+        with:
+          mode: gate
+          src: ${{ inputs.src }}
+          flags: ${{ inputs.flags }}
+      - name: Materialize + publish to wiki
+        uses: paddyodab/dist-brain-metadata-tooling@v1
+        with:
+          mode: materialize
+          src: ${{ inputs.src }}
+          flags: ${{ inputs.flags }}
+          wiki-repo: ${{ github.repository }}
+          wiki-token: ${{ secrets.wiki-token }}

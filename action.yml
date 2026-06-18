@@ -1,0 +1,46 @@
+name: "dist-brain metadata tooling"
+description: "Gate colocated metadata, or materialize it into a GitHub wiki."
+inputs:
+  mode:
+    description: "gate | materialize"
+    required: true
+  src:
+    description: "source dir, relative to the consumer repo root"
+    default: "src"
+  flags:
+    description: "flags registry file, relative to the consumer repo root"
+    default: "flags.yml"
+  wiki-repo:
+    description: "owner/repo whose wiki to publish to (materialize mode)"
+    default: ${{ github.repository }}
+  wiki-token:
+    description: "PAT with repo scope for wiki push (materialize mode)"
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Tier-1 metadata gate
+      if: inputs.mode == 'gate'
+      shell: bash
+      run: |
+        python3 "$GITHUB_ACTION_PATH/engine/check_metadata.py" \
+          --root "$GITHUB_WORKSPACE" \
+          --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
+          --flags "$GITHUB_WORKSPACE/${{ inputs.flags }}"
+    - name: Materialize + publish to wiki
+      if: inputs.mode == 'materialize'
+      shell: bash
+      env:
+        GITHUB_SHA: ${{ github.sha }}
+      run: |
+        if [ -z "${{ inputs.wiki-token }}" ]; then
+          echo "wiki-token not provided — skipping wiki publish."
+          exit 0
+        fi
+        chmod +x "$GITHUB_ACTION_PATH/engine/publish_wiki.sh"
+        "$GITHUB_ACTION_PATH/engine/publish_wiki.sh" \
+          "${{ inputs.wiki-repo }}" "${{ inputs.wiki-token }}" "$GITHUB_WORKSPACE" \
+          "${{ inputs.src }}" "${{ inputs.flags }}"

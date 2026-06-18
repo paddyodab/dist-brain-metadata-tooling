@@ -1,0 +1,28 @@
+name: brain-gate
+
+# Reusable workflow: Tier-1 metadata gate. A consumer calls it with:
+#   jobs:
+#     gate:
+#       uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/gate.yml@v1
+on:
+  workflow_call:
+    inputs:
+      src:
+        type: string
+        default: "src"
+        required: false
+      flags:
+        type: string
+        default: "flags.yml"
+        required: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: paddyodab/dist-brain-metadata-tooling@v1
+        with:
+          mode: gate
+          src: ${{ inputs.src }}
+          flags: ${{ inputs.flags }}
