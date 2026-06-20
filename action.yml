@@ -44,6 +44,14 @@ runs:
           --root "$GITHUB_WORKSPACE" \
           --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
           --check
+        python3 "$GITHUB_ACTION_PATH/engine/generate_flag_matrix.py" \
+          --root "$GITHUB_WORKSPACE" \
+          --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
+          --check
+        python3 "$GITHUB_ACTION_PATH/engine/generate_gherkin.py" \
+          --root "$GITHUB_WORKSPACE" \
+          --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
+          --check
     - name: IaC required-tags gate
       if: inputs.mode == 'tags'
       shell: bash

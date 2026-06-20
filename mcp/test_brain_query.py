@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from brain_query import Brain
+from brain_query import Brain, merge_graphs, parse_sources
 
 
 class SearchTests(unittest.TestCase):
@@ -66,6 +66,42 @@ class SearchTests(unittest.TestCase):
 
     def test_empty_query(self) -> None:
         self.assertEqual(self.brain.search("   "), [])
+
+
+class JoinTests(unittest.TestCase):
+    def test_parse_comma_separated_sources(self) -> None:
+        spec = "my-app|https://example.com/wiki/my-app/graph.json,lib|/tmp/lib.json"
+        parsed = parse_sources(spec)
+        self.assertEqual(parsed[0][0], "my-app")
+        self.assertEqual(parsed[1][0], "lib")
+
+    def test_merge_prefixes_ids(self) -> None:
+        g1 = {"nodes": [{"id": "src/a.py#fn", "type": "function", "title": "fn"}],
+              "edges": [{"from": "src/a.py#fn", "to": "flag:x", "type": "gated-by"}],
+              "generated_from_sha": "aaa"}
+        g2 = {"nodes": [{"id": "flag:y", "type": "flag", "title": "y"}],
+              "edges": [], "generated_from_sha": "bbb"}
+        merged = merge_graphs([("app", g1), ("lib", g2)])
+        self.assertTrue(merged["joined"])
+        ids = {n["id"] for n in merged["nodes"]}
+        self.assertIn("app:src/a.py#fn", ids)
+        self.assertIn("lib:flag:y", ids)
+        self.assertEqual(merged["edges"][0]["from"], "app:src/a.py#fn")
+        self.assertEqual(len(merged["sources"]), 2)
+
+    def test_search_scoped_by_source(self) -> None:
+        graph = merge_graphs([
+            ("app", {"nodes": [{"id": "src/a.py#resolve", "type": "function",
+                                "title": "resolve", "intent": "resolve urls"}], "edges": []}),
+            ("lib", {"nodes": [{"id": "src/b.py#parse", "type": "function",
+                                "title": "parse", "intent": "parse urls"}], "edges": []}),
+        ])
+        brain = Brain("unused")
+        brain._graph = graph
+        app_hits = brain.search("resolve", source="app")
+        self.assertEqual(len(app_hits), 1)
+        self.assertEqual(app_hits[0]["source"], "app")
+        self.assertEqual(brain.search("resolve", source="lib"), [])
 
 
 if __name__ == "__main__":

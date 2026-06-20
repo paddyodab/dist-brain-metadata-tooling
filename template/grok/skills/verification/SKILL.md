@@ -26,29 +26,37 @@ work packets, and what *not* to do in autonomous runs.
 
 ## Steps
 
-1. **Regenerate stubs** from current contracts (deterministic, not LLM-guessed):
+1. **Regenerate all verification artifacts** from current contracts:
 
    ```bash
    python3 /path/to/dist-brain-metadata-tooling/engine/generate_verification.py --root .
+   python3 /path/to/dist-brain-metadata-tooling/engine/generate_flag_matrix.py --root .
+   python3 /path/to/dist-brain-metadata-tooling/engine/generate_gherkin.py --root .
    ```
 
 2. **Implement any new stubs** — generated tests with `pytest.fail(...)` need bodies.
    Pattern-matched stubs (InvalidURL, AliasTaken, LinkNotFound) may already pass.
+   Flag-matrix tests use `FLAG_<NAME>=true|false` via monkeypatch until the app wires flags.
 
 3. **Run the verification stack**:
 
    ```bash
    python3 .../engine/check_metadata.py --root .
    python3 .../engine/generate_verification.py --root . --check
+   python3 .../engine/generate_flag_matrix.py --root . --check
+   python3 .../engine/generate_gherkin.py --root . --check
    PYTHONPATH=src pytest -q
    ```
 
 4. **Report** — list pass/fail per layer:
    - Tier-1 metadata gate
    - Contract stubs up to date (`--check`)
-   - pytest green
+   - Flag-matrix stubs up to date
+   - Gherkin features up to date
+   - pytest green (skip flag-matrix failures until bodies implemented, but report them)
 
-5. **Not done until all three pass.** For long-running work, loop: implement → verify → commit.
+5. **Not done until gate + stub checks pass and pytest is green** on implemented tests.
+   For long-running work, loop: implement → verify → commit.
 
 ## Long-running / goal sessions
 

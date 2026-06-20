@@ -37,16 +37,25 @@ def _brain() -> Brain:
 def overview() -> dict:
     """Get a high-level map of the codebase: entity/flag/decision counts, the list
     of modules, feature flags, and architecture decisions (ADRs). Call this first
-    to orient before drilling in."""
+    to orient before drilling in. When multiple graphs are joined, includes per-source
+    metadata and joined=true."""
     return _brain().overview()
 
 
 @mcp.tool()
-def search(query: str) -> list:
+def list_sources() -> list:
+    """List brain graph sources when DIST_BRAIN_GRAPH joins multiple repos.
+    Each entry has slug, generated_from_sha, and node_count. Use slug as the
+    source filter in search() and list_decisions()."""
+    return _brain().list_sources()
+
+
+@mcp.tool()
+def search(query: str, source: str = "") -> list:
     """Search the codebase knowledge graph by keyword across entity ids, titles,
     and intent prose. Returns matching functions, flags, and decisions with their
-    stable ids — cite the ids."""
-    return _brain().search(query)
+    stable ids — cite the ids. Optional source=slug limits to one joined repo."""
+    return _brain().search(query, source=source or None)
 
 
 @mcp.tool()
@@ -66,10 +75,10 @@ def neighbors(id: str) -> dict:
 
 
 @mcp.tool()
-def list_decisions() -> list:
+def list_decisions(source: str = "") -> list:
     """List the architecture decision records (ADRs) — the cross-cutting 'why' —
-    with status and a one-line summary each."""
-    return _brain().decisions()
+    with status and a one-line summary each. Optional source=slug when graphs are joined."""
+    return _brain().decisions(source=source or None)
 
 
 if __name__ == "__main__":

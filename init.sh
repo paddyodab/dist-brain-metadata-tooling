@@ -23,7 +23,7 @@ cp "$HERE/template/CONTRIBUTING.md"          "$TARGET/CONTRIBUTING.md"
 cp "$HERE/template/pull_request_template.md" "$TARGET/.github/pull_request_template.md"
 
 # ---- Grok skills --------------------------------------------------------------
-for skill in feature infra learning freshness-review dist-brain verification; do
+for skill in feature infra learning freshness-review dist-brain verification orchestrator-handoff; do
   mkdir -p "$TARGET/.grok/skills/$skill"
   cp "$HERE/template/grok/skills/$skill/SKILL.md" "$TARGET/.grok/skills/$skill/SKILL.md"
 done
@@ -53,6 +53,7 @@ echo "    .grok/skills/learning/         (/learning — route-by-half-life)"
 echo "    .grok/skills/freshness-review/ (/freshness-review — Tier-2 semantic gate)"
 echo "    .grok/skills/dist-brain/       (/dist-brain — query MCP brain)"
 echo "    .grok/skills/verification/     (/verification — contract → pytest loop)"
+echo "    .grok/skills/orchestrator-handoff/ (/orchestrator-handoff — plan → packet → delegate)"
 echo "  Claude commands (legacy):"
 echo "    .claude/commands/feature.md"
 echo "    .claude/commands/infra.md"

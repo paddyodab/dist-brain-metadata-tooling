@@ -143,6 +143,7 @@ reloads per call, so it always reflects the latest published graph.
 | **`/freshness-review`** | Tier-2 semantic gate: does prose intent still match the code? |
 | **`/dist-brain`** | Query the materialized brain via MCP (`overview`, `search`, `get_entity`, …) |
 | **`/verification`** | Contract → pytest loop — the checkpoint for long-running agent work |
+| **`/orchestrator-handoff`** | Plan → work packet → delegate with verification exit criteria |
 
 ```bash
 # skills only
@@ -159,16 +160,35 @@ reloads per call, so it always reflects the latest published graph.
 more than they need autonomy.
 
 `engine/generate_verification.py` turns `@raises` / `@returns` contracts into
-`tests/generated/test_contract_verification.py`. CI can enforce stubs stay in sync:
+`tests/generated/test_contract_verification.py`. Companion generators:
+
+| Script | Output |
+|---|---|
+| `generate_flag_matrix.py` | `tests/generated/test_flag_matrix.py` — on/off per `@flag` |
+| `generate_gherkin.py` | `tests/generated/features/*.feature` — BDD from `@intent` |
+
+CI enforces all three stay in sync via `mode: verify`:
 
 ```yaml
 verify:
-  uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/verify.yml@v1.5
+  uses: paddyodab/dist-brain-metadata-tooling/.github/workflows/verify.yml@v1.6
 ```
 
 The `/feature` → `/verification` loop: approve contracts → implement → regenerate
 stubs → pytest green. That's the oracle for goal/loop sessions — not "I think I'm
 done," but gates + tests pass.
+
+### Cross-repo brain join
+
+`DIST_BRAIN_GRAPH` can join multiple materialized brains:
+
+```
+my-app|https://raw.githubusercontent.com/wiki/owner/my-app/graph.json,
+lib-foo|https://raw.githubusercontent.com/wiki/owner/lib-foo/graph.json
+```
+
+MCP adds `list_sources` and optional `source` filter on `search` / `list_decisions`.
+Joined entity ids are prefixed: `my-app:src/linkshort/shorten.py#create_short_link`.
 
 ## Materialization includes IaC
 
@@ -179,4 +199,6 @@ its tags, and tag coverage against `tag-policy.yml`. Resources also land in
 
 ## Roadmap
 
-- **`/feature` + `/infra` + `/learning` as a Claude Code plugin** (vs. copy-in).
+- **SQLite brain** at scale (see homeroom `notes/road-trip-2026-06.md`)
+- **Legacy intent inference** — git archaeology → draft contracts → ratification
+- **`/feature` + `/infra` + `/learning` as a Claude Code plugin** (vs. copy-in)

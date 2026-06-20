@@ -25,10 +25,25 @@ server exposes it as query tools. Use these instead of re-scanning the whole rep
 ## MCP tools (namespace: `dist_brain__`)
 
 1. **`dist_brain__overview`** — call first. Module list, flag list, ADR index, counts.
-2. **`dist_brain__search`** — keyword search across ids, titles, intent prose.
-3. **`dist_brain__get_entity`** — full record for one stable id (cite ids in summaries).
-4. **`dist_brain__neighbors`** — graph edges in/out for impact analysis.
-5. **`dist_brain__list_decisions`** — all ADRs with status and one-line summary.
+   When graphs are joined, includes `joined: true` and per-source metadata.
+2. **`dist_brain__list_sources`** — slugs when `DIST_BRAIN_GRAPH` joins multiple repos.
+3. **`dist_brain__search`** — keyword search across ids, titles, intent prose.
+   Optional `source` param scopes to one joined repo.
+4. **`dist_brain__get_entity`** — full record for one stable id (cite ids in summaries).
+   Joined ids are prefixed: `my-app:src/linkshort/shorten.py#create_short_link`.
+5. **`dist_brain__neighbors`** — graph edges in/out for impact analysis.
+6. **`dist_brain__list_decisions`** — all ADRs; optional `source` when joined.
+
+### Cross-repo join
+
+Set `DIST_BRAIN_GRAPH` to comma-separated `slug|url` pairs:
+
+```
+my-app|https://raw.githubusercontent.com/wiki/owner/my-app/graph.json,
+lib-foo|https://raw.githubusercontent.com/wiki/owner/lib-foo/graph.json
+```
+
+Or a JSON array: `[{"slug":"my-app","url":"https://..."}]`
 
 Use `search_tool` to discover these if needed, then `use_tool` to call them.
 
