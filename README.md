@@ -154,6 +154,10 @@ reloads per call, so it always reflects the latest published graph.
 
 ## Contract verification (long-running agent checkpoint)
 
+**Start here for the philosophy:** [`docs/verification-loop.md`](docs/verification-loop.md)
+— the done predicate, work packets, and why goal/loop sessions need verification
+more than they need autonomy.
+
 `engine/generate_verification.py` turns `@raises` / `@returns` contracts into
 `tests/generated/test_contract_verification.py`. CI can enforce stubs stay in sync:
 
