@@ -190,6 +190,17 @@ lib-foo|https://raw.githubusercontent.com/wiki/owner/lib-foo/graph.json
 MCP adds `list_sources` and optional `source` filter on `search` / `list_decisions`.
 Joined entity ids are prefixed: `my-app:src/linkshort/shorten.py#create_short_link`.
 
+### SQLite brain (scale spike)
+
+**Canonical store:** `brain.sqlite` with FTS5, rolling `main` revision, tag snapshots.
+See [`docs/sqlite-brain-spike.md`](docs/sqlite-brain-spike.md).
+
+```bash
+DIST_BRAIN_GRAPH=brain/brain.sqlite DIST_BRAIN_REVISION=main python3 mcp/server.py
+```
+
+`graph.json` remains optional export for small repos; use `--no-json` at scale.
+
 ## Materialization includes IaC
 
 When a repo has IaC, the materializer projects an **Infrastructure** wiki page and

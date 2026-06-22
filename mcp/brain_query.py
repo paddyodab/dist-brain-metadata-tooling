@@ -1,22 +1,25 @@
-"""Query logic over a materialized brain `graph.json` (stdlib only).
+"""Query logic over a materialized brain (stdlib only).
 
-Pure functions so they can be unit-tested without the MCP SDK installed. The
-graph source is a local path, http(s) URL, comma-separated multi-source spec,
-or JSON array:
+Sources:
+  - graph.json (http(s) URL or local path) — legacy/small-repo export
+  - brain.sqlite — canonical store with FTS5 and revisions (preferred at scale)
 
-  Single:  https://raw.githubusercontent.com/wiki/owner/repo/graph.json
-  Multi:   my-app|https://.../graph.json,lib-foo|https://.../graph.json
-  JSON:    [{"slug":"my-app","url":"https://..."},{"slug":"lib-foo","url":"..."}]
-
-Joined graphs namespace node ids as `{slug}:{original_id}` to avoid collisions.
+Multi-repo join applies to JSON sources only in this spike.
 """
 from __future__ import annotations
 
 import json
 import re
+import sys
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
+
+_ENGINE = Path(__file__).resolve().parent.parent / "engine"
+if str(_ENGINE) not in sys.path:
+    sys.path.insert(0, str(_ENGINE))
+
+from brain_store import DEFAULT_REVISION, BrainStore  # noqa: E402
 
 
 def _hay_words(hay: str) -> list[str]:
@@ -136,21 +139,41 @@ def merge_graphs(sources: list[tuple[str, dict]]) -> dict:
     }
 
 
+def _is_sqlite(path: str) -> bool:
+    low = path.lower()
+    return low.endswith(".sqlite") or low.endswith(".db")
+
+
 class Brain:
-    def __init__(self, source: str):
+    def __init__(self, source: str, revision: str = DEFAULT_REVISION):
         self.source = str(source)
+        self.revision = revision
         self._sources: list[tuple[str, str]] = parse_sources(self.source)
         self._graph: dict = {"nodes": [], "edges": []}
+        self._store: BrainStore | None = None
 
     def load(self) -> "Brain":
+        loc = self._sources[0][1]
+        if len(self._sources) == 1 and _is_sqlite(loc):
+            path = Path(loc)
+            if loc.startswith(("http://", "https://")):
+                return self._load_sqlite_remote(loc)
+            self._store = BrainStore.open(path)
+            self._graph = self._store.load_graph(self.revision)
+            self._graph["joined"] = False
+            self._graph["storage"] = "sqlite"
+            self._graph["revisions"] = self._store.list_revisions()
+            return self
+
         loaded: list[tuple[str, dict]] = []
-        for slug, loc in self._sources:
-            loaded.append((slug, _fetch_graph(loc)))
+        for slug, src_loc in self._sources:
+            loaded.append((slug, _fetch_graph(src_loc)))
         if len(loaded) == 1:
             graph = loaded[0][1]
             graph = {
                 **graph,
                 "joined": False,
+                "storage": "json",
                 "sources": [{
                     "slug": loaded[0][0],
                     "generated_from_sha": graph.get("generated_from_sha"),
@@ -161,6 +184,21 @@ class Brain:
             self._graph = graph
         else:
             self._graph = merge_graphs(loaded)
+            self._graph["storage"] = "json"
+        return self
+
+    def _load_sqlite_remote(self, url: str) -> "Brain":
+        import tempfile
+        with urllib.request.urlopen(url, timeout=30) as r:  # noqa: S310
+            data = r.read()
+        tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+        tmp.write(data)
+        tmp.close()
+        self._store = BrainStore.open(Path(tmp.name))
+        self._graph = self._store.load_graph(self.revision)
+        self._graph["joined"] = False
+        self._graph["storage"] = "sqlite"
+        self._graph["revisions"] = self._store.list_revisions()
         return self
 
     @property
@@ -173,6 +211,20 @@ class Brain:
 
     def list_sources(self) -> list[dict]:
         return list(self._graph.get("sources", []))
+
+    def list_revisions(self) -> list[dict]:
+        if self._store:
+            return self._store.list_revisions()
+        rev = self._graph.get("revision")
+        if rev:
+            return [{
+                "ref": rev,
+                "sha": self._graph.get("generated_from_sha"),
+                "node_count": self._graph.get("node_count", len(self.nodes)),
+                "edge_count": len(self.edges),
+                "is_rolling": 1 if rev == DEFAULT_REVISION else 0,
+            }]
+        return []
 
     def _filter_nodes(self, nodes: list[dict], source: str | None) -> list[dict]:
         if not source:
@@ -192,7 +244,10 @@ class Brain:
                      for n in self.nodes if n["type"] == "decision"]
         return {
             "joined": self._graph.get("joined", False),
+            "storage": self._graph.get("storage"),
+            "revision": self._graph.get("revision", self.revision),
             "sources": self.list_sources(),
+            "revisions": self.list_revisions(),
             "generated_from_sha": self._graph.get("generated_from_sha"),
             "counts": by_type,
             "modules": modules,
@@ -202,6 +257,8 @@ class Brain:
 
     def search(self, query: str, limit: int = 12, source: str | None = None) -> list[dict]:
         """Match nodes whose id/title/intent contain every query token (AND)."""
+        if self._store and not source:
+            return self._store.search(query, revision=self.revision, limit=limit)
         tokens = [t for t in query.lower().split() if t]
         if not tokens:
             return []

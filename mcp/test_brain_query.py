@@ -104,5 +104,19 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(brain.search("resolve", source="lib"), [])
 
 
+class SqliteBrainTests(unittest.TestCase):
+    def test_sqlite_overview_and_search(self) -> None:
+        db = "/tmp/my-app-brain/brain.sqlite"
+        if not Path(db).exists():
+            self.skipTest("run materialize first")
+        brain = Brain(db, revision="main").load()
+        ov = brain.overview()
+        self.assertEqual(ov["storage"], "sqlite")
+        self.assertIn("enable_custom_aliases", ov["flags"])
+        hits = brain.search("custom aliases")
+        ids = {h["id"] for h in hits}
+        self.assertTrue(ids)
+
+
 if __name__ == "__main__":
     unittest.main()
