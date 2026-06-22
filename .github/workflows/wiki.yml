@@ -34,7 +34,7 @@ jobs:
           src: ${{ inputs.src }}
           flags: ${{ inputs.flags }}
       - name: Materialize + publish to wiki
-        uses: paddyodab/dist-brain-metadata-tooling@v1
+        uses: paddyodab/dist-brain-metadata-tooling@v1.7
         with:
           mode: materialize
           src: ${{ inputs.src }}
