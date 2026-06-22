@@ -76,4 +76,9 @@ def list_decisions(source: str = "", revision: str = "") -> list:
 
 
 if __name__ == "__main__":
+    print(
+        f"dist-brain MCP listening on stdio ({SOURCE}, revision={DEFAULT_REVISION_ENV})",
+        file=sys.stderr,
+        flush=True,
+    )
     mcp.run()
