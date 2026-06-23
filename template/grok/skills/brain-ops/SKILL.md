@@ -25,6 +25,7 @@ Config (optional): copy `brain.conf.example` → `brain.conf` at repo root.
 | `scripts/brain stubs` | Generate contract verification pytest stubs |
 | `scripts/brain generate` | stubs + flags + gherkin |
 | `scripts/brain verify` | gate + `--check` on all generators + pytest |
+| `scripts/brain status` | **local coverage report** — intent % by module, queue backlog, wiki paths |
 
 ## When to use
 
@@ -35,9 +36,11 @@ Config (optional): copy `brain.conf.example` → `brain.conf` at repo root.
 
 ## Workflow shortcuts
 
-**Post-ratification refresh:**
+**After any ratify slice — check progress locally (no GH/wiki wait):**
 ```bash
+scripts/brain status
 scripts/brain materialize
+# open BRAIN_DIR/Home.md or agent-context.md in your editor
 scripts/brain generate
 ```
 

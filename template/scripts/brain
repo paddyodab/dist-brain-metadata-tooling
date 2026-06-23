@@ -9,6 +9,7 @@
 #   flags [--check]             generate (or verify) flag-matrix stubs
 #   generate [--check]          all three generators
 #   verify                      gate + generate --check + pytest (if poetry/npm present)
+#   status                      intent-coverage report (local pytest-cov analogue)
 #   help
 set -euo pipefail
 
@@ -79,6 +80,9 @@ case "$cmd" in
     py_src generate_verification "$@"
     py_src generate_flag_matrix "$@"
     py_src generate_gherkin "$@"
+    ;;
+  status|report|cov)
+    py_src brain_status --brain "$BRAIN_DIR"
     ;;
   verify)
     py_src check_metadata
