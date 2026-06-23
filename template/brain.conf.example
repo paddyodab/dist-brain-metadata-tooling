@@ -1,0 +1,4 @@
+# Copy to brain.conf and adjust. Local paths — do not commit brain.conf.
+BRAIN_SRC=app
+BRAIN_DIR=/tmp/sandbox-brain
+DIST_BRAIN_ENGINE=/path/to/dist-brain-metadata-tooling/engine

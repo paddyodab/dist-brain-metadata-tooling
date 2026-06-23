@@ -29,10 +29,11 @@ work packets, and what *not* to do in autonomous runs.
 1. **Regenerate all verification artifacts** from current contracts:
 
    ```bash
-   python3 /path/to/dist-brain-metadata-tooling/engine/generate_verification.py --root .
-   python3 /path/to/dist-brain-metadata-tooling/engine/generate_flag_matrix.py --root .
-   python3 /path/to/dist-brain-metadata-tooling/engine/generate_gherkin.py --root .
+   scripts/brain generate
    ```
+
+   (Or raw engine: `generate_verification.py`, `generate_flag_matrix.py`,
+   `generate_gherkin.py` — each needs `--src` when the tree is not `src/`.)
 
 2. **Implement any new stubs** — generated tests with `pytest.fail(...)` need bodies.
    Pattern-matched stubs (InvalidURL, AliasTaken, LinkNotFound) may already pass.
@@ -41,11 +42,7 @@ work packets, and what *not* to do in autonomous runs.
 3. **Run the verification stack**:
 
    ```bash
-   python3 .../engine/check_metadata.py --root .
-   python3 .../engine/generate_verification.py --root . --check
-   python3 .../engine/generate_flag_matrix.py --root . --check
-   python3 .../engine/generate_gherkin.py --root . --check
-   PYTHONPATH=src pytest -q
+   scripts/brain verify
    ```
 
 4. **Report** — list pass/fail per layer:

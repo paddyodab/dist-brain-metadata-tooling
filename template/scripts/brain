@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Thin CLI over dist-brain-metadata-tooling/engine/*.py
+# Usage: scripts/brain <command> [args...]
+#   materialize [brain-dir]   write brain.sqlite + graph.json
+#   infer <path> [--out file]   draft @intent queue for legacy symbols
+#   gate                        Tier-1 metadata check
+#   gherkin [--check]           generate (or verify) BDD features
+#   stubs [--check]             generate (or verify) contract test stubs
+#   flags [--check]             generate (or verify) flag-matrix stubs
+#   generate [--check]          all three generators
+#   verify                      gate + generate --check + pytest (if poetry/npm present)
+#   help
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if [[ -f "$ROOT/brain.conf" ]]; then
+  # shellcheck source=/dev/null
+  source "$ROOT/brain.conf"
+fi
+
+SRC="${BRAIN_SRC:-src}"
+BRAIN_DIR="${BRAIN_DIR:-/tmp/brain}"
+ENGINE="${DIST_BRAIN_ENGINE:-}"
+
+if [[ -z "$ENGINE" ]]; then
+  for candidate in \
+    "$ROOT/../dist-brain-metadata-tooling/engine" \
+    "$HOME/Documents/GitHub/dist-brain-metadata-tooling/engine"
+  do
+    if [[ -d "$candidate" ]]; then
+      ENGINE="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$ENGINE" || ! -d "$ENGINE" ]]; then
+  echo "brain: cannot find engine — set DIST_BRAIN_ENGINE in brain.conf" >&2
+  exit 1
+fi
+
+py() {
+  python3 "$ENGINE/$1.py" --root "$ROOT" "${@:2}"
+}
+
+py_src() {
+  python3 "$ENGINE/$1.py" --root "$ROOT" --src "$SRC" "${@:2}"
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  materialize|mat)
+    out="${1:-$BRAIN_DIR}"
+    py materialize --src "$SRC" --brain "$out"
+    echo "brain: materialized → $out"
+    ;;
+  infer)
+    path="${1:?usage: scripts/brain infer <file-or-dir>}"
+    shift || true
+    py_src infer_intent --path "$path" "$@"
+    ;;
+  gate|check)
+    py_src check_metadata
+    ;;
+  gherkin)
+    py_src generate_gherkin "$@"
+    ;;
+  stubs|verification)
+    py_src generate_verification "$@"
+    ;;
+  flags|flag-matrix)
+    py_src generate_flag_matrix "$@"
+    ;;
+  generate|gen)
+    py_src generate_verification "$@"
+    py_src generate_flag_matrix "$@"
+    py_src generate_gherkin "$@"
+    ;;
+  verify)
+    py_src check_metadata
+    py_src generate_verification --check
+    py_src generate_flag_matrix --check
+    py_src generate_gherkin --check
+    if command -v poetry >/dev/null 2>&1 && [[ -f pyproject.toml ]]; then
+      poetry run pytest -q
+    elif [[ -f package.json ]] && command -v npm >/dev/null 2>&1; then
+      npm test
+    else
+      PYTHONPATH="${PYTHONPATH:-}:$ROOT/$SRC" python3 -m pytest -q 2>/dev/null || \
+        echo "brain: no poetry/npm — skipped pytest"
+    fi
+    ;;
+  help|-h|--help)
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    echo
+    echo "Config (optional $ROOT/brain.conf):"
+    echo "  BRAIN_SRC=app          source tree (default: src)"
+    echo "  BRAIN_DIR=/tmp/brain   materialize output"
+    echo "  DIST_BRAIN_ENGINE=...  path to engine/ directory"
+    echo
+    echo "This repo: BRAIN_SRC=$SRC  ENGINE=$ENGINE"
+    ;;
+  *)
+    echo "brain: unknown command '$cmd' (try: help)" >&2
+    exit 1
+    ;;
+esac

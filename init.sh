@@ -23,10 +23,15 @@ cp "$HERE/template/CONTRIBUTING.md"          "$TARGET/CONTRIBUTING.md"
 cp "$HERE/template/pull_request_template.md" "$TARGET/.github/pull_request_template.md"
 
 # ---- Grok skills --------------------------------------------------------------
-for skill in feature infra learning freshness-review dist-brain verification orchestrator-handoff; do
+for skill in feature infra learning freshness-review dist-brain verification orchestrator-handoff brain-ops; do
   mkdir -p "$TARGET/.grok/skills/$skill"
   cp "$HERE/template/grok/skills/$skill/SKILL.md" "$TARGET/.grok/skills/$skill/SKILL.md"
 done
+
+mkdir -p "$TARGET/scripts"
+cp "$HERE/template/scripts/brain" "$TARGET/scripts/brain"
+chmod +x "$TARGET/scripts/brain"
+cp "$HERE/template/brain.conf.example" "$TARGET/brain.conf.example"
 
 # ---- Grok MCP config (optional) -----------------------------------------------
 if [[ -n "$WIKI_REPO" ]]; then
@@ -54,6 +59,10 @@ echo "    .grok/skills/freshness-review/ (/freshness-review — Tier-2 semantic 
 echo "    .grok/skills/dist-brain/       (/dist-brain — query MCP brain)"
 echo "    .grok/skills/verification/     (/verification — contract → pytest loop)"
 echo "    .grok/skills/orchestrator-handoff/ (/orchestrator-handoff — plan → packet → delegate)"
+echo "    .grok/skills/brain-ops/           (/brain-ops — scripts/brain CLI)"
+echo "  Scripts:"
+echo "    scripts/brain                     (materialize, infer, gate, generate, verify)"
+echo "    brain.conf.example                (copy → brain.conf for BRAIN_SRC / paths)"
 echo "  Claude commands (legacy):"
 echo "    .claude/commands/feature.md"
 echo "    .claude/commands/infra.md"
