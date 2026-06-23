@@ -80,9 +80,21 @@ takes `iac` (dir to scan, default whole repo) and `tag-policy` (default `tag-pol
 
 ## Run the engine locally
 
+Consumer repos should use **`scripts/brain`** (installed by `init.sh`) — see
+[`docs/legacy-adoption-workflow.md`](docs/legacy-adoption-workflow.md).
+
 ```bash
-python3 engine/check_metadata.py --root ../your-repo      # gate
-python3 engine/materialize.py    --root ../your-repo --brain /tmp/brain   # render
+./scripts/brain status
+./scripts/brain infer app/services/foo.py
+./scripts/brain materialize
+./scripts/brain generate
+```
+
+Raw engine (when `brain.conf` is not set):
+
+```bash
+python3 engine/check_metadata.py --root ../your-repo --src app   # gate
+python3 engine/materialize.py --root ../your-repo --src app --brain /tmp/brain
 ```
 
 ## Agent projection (MCP server)
@@ -143,6 +155,7 @@ reloads per call, so it always reflects the latest published graph.
 | **`/freshness-review`** | Tier-2 semantic gate: does prose intent still match the code? |
 | **`/dist-brain`** | Query the materialized brain via MCP (`overview`, `search`, `get_entity`, …) |
 | **`/verification`** | Contract → pytest loop — the checkpoint for long-running agent work |
+| **`/brain-ops`** | `scripts/brain` CLI — materialize, infer, status, generate, verify |
 | **`/orchestrator-handoff`** | Plan → work packet → delegate with verification exit criteria |
 
 ```bash
@@ -158,6 +171,10 @@ reloads per call, so it always reflects the latest published graph.
 **Start here for the philosophy:** [`docs/verification-loop.md`](docs/verification-loop.md)
 — the done predicate, work packets, and why goal/loop sessions need verification
 more than they need autonomy.
+
+**Legacy / existing codebases:** [`docs/legacy-adoption-workflow.md`](docs/legacy-adoption-workflow.md)
+— inference → ratify → `scripts/brain` local loop (validated walkthrough; incremental
+adoption, stub skips, when *not* to run full `verify`).
 
 `engine/generate_verification.py` turns `@raises` / `@returns` contracts into
 `tests/generated/test_contract_verification.py`. Companion generators:
@@ -211,5 +228,6 @@ its tags, and tag coverage against `tag-policy.yml`. Resources also land in
 ## Roadmap
 
 - **SQLite brain** at scale (see homeroom `notes/road-trip-2026-06.md`)
-- **Legacy intent inference** — git archaeology → draft contracts → ratification
+- **Boy-scout gate** — `check_metadata` on touched files only (legacy CI)
+- ~~**Legacy intent inference**~~ — shipped: `infer_intent.py` + [`docs/legacy-adoption-workflow.md`](docs/legacy-adoption-workflow.md)
 - **`/feature` + `/infra` + `/learning` as a Claude Code plugin** (vs. copy-in)

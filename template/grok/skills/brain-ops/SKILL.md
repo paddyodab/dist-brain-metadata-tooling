@@ -11,6 +11,8 @@ metadata:
 
 # Brain Ops (local toolchain)
 
+**Full legacy walkthrough:** `dist-brain-metadata-tooling/docs/legacy-adoption-workflow.md`
+
 Consumer repos ship `scripts/brain` — a bash wrapper over
 `dist-brain-metadata-tooling/engine/*.py`. **Prefer this over raw python3 paths.**
 

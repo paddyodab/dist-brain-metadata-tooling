@@ -170,7 +170,9 @@ semantics, split across jobs for clarity.
 - **Greenfield:** `/feature` at plan time → contracts → stubs → implement → verify.
   Team + GHA enforce the habit; brain grows at the velocity of real work.
 - **Legacy:** Brain has gaps (rung 0). LSP + grep for cold code; verification still
-  applies on *touched* functions — boy-scout rule, gate-enforced.
+  applies on *touched* functions — boy-scout rule, gate-enforced. **Walkthrough:**
+  [`legacy-adoption-workflow.md`](legacy-adoption-workflow.md) (infer → ratify →
+  `scripts/brain`; stub skips; incremental vs full `verify`).
 - **Long-running / goal sessions:** The queue is packets; the stop condition is
   `DONE(packet)`; the session ends when the queue is empty and every packet green.
 
