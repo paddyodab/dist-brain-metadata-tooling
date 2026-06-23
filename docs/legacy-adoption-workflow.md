@@ -369,6 +369,77 @@ Until then: local loop is complete with `materialize` + `status` + MCP on `brain
 
 ---
 
+## CI and coverage gates during brownfield adoption
+
+You **cannot** flip every strict legacy CI rule to “full distributed-brain mode” on day
+one. Large repos need a **transition policy** — same boy-scout idea as metadata.
+
+### Three different “coverage” concepts (don’t conflate)
+
+| Metric | What it measures | Legacy adoption bar |
+|--------|------------------|---------------------|
+| **Line coverage** (`pytest-cov`, `--cov-fail-under`) | % of lines executed by tests | Loosen or scope — unchanged code isn’t worse because you added `@intent` |
+| **Metadata coverage** (`scripts/brain status`) | % of public symbols with `@intent` | **Your real progress bar** during Track 1 |
+| **Contract coverage** (`pytest -m contract_verification`) | Ratified contracts with executable proof | Grows as you implement stub bodies; skips are OK interim |
+
+Raising metadata coverage does not automatically raise line coverage — and that is fine.
+
+### What you typically relax (temporarily)
+
+- **`--cov-fail-under=100`** (or any aggressive global floor) — drop, lower, or
+  **scope to touched packages** until the team agrees otherwise. Local/dev:
+  `pytest --no-cov` or a `pytest.ini` override profile for metadata slices.
+- **Full-repo metadata gate** (`check_metadata` on every public function) — defer;
+  use slice ratify + `status` until boy-scout gate ships.
+- **`scripts/brain verify`** — same as full metadata gate; not the incremental oracle.
+- **Generated contract tests failing CI** — stubs should **skip** (see Step 5); never
+  let unimplemented `@returns` stubs block app tests.
+
+### What you tighten on touch (boy-scout)
+
+On files/modules you **touch** in a PR:
+
+- New or changed public functions get full contracts (`@intent`, `@param`, …).
+- Tier-1 gate on **diff scope** (when wired) — fail if touched surface lacks metadata.
+- Optionally: touched lines need tests (existing team bar, not necessarily 100% repo-wide).
+- `/freshness-review` on changed functions — prose still matches code.
+
+### Sensible ramp (large brownfield)
+
+```
+Phase 0 — Instrument (now)
+  status + infer/ratify slices; pytest app suite green; cov-fail-under relaxed or off-CI
+  contract stubs skip; wiki/MCP local
+
+Phase 1 — Warn
+  CI: metadata gate WARN on touched files; status % posted in PR comment
+  cov-fail-under on touched packages only
+
+Phase 2 — Enforce
+  metadata gate FAIL on touched; contract stubs required for touched contracts
+  line coverage policy per team (may still not be 100% repo-wide)
+
+Phase 3 — Mature
+  full verify on merge to main; metadata % high enough that full gate is boring
+```
+
+The RealWorld sandbox still has `--cov-fail-under=100` in `pyproject.toml` from upstream;
+running `pytest --no-cov` during metadata work is normal. Lowering or scoping that
+threshold is a **repo policy choice**, not a failure of the metadata approach.
+
+### Words of wisdom
+
+- **Don’t let two adoption tracks fight each other.** If you’re ratifying intents in
+  `app/services/`, you are not obliged to fix repo-wide line coverage in the same PR.
+- **One progress bar at a time.** During Track 1, `brain status` % is the motivational
+  metric; resurrect line-coverage floors when metadata slices are routine.
+- **Stupid gates stay stupid.** 100% line coverage on a brownfield API is often vanity;
+  loosening it for adoption is engineering honesty, not slacking.
+- **Tighten on touch, not on history.** The org habit you want long-term is “every change
+  leaves the brain richer” — not “stop the line until 10k LOC have `@intent`.”
+
+---
+
 ## Roadmap (workflow gaps)
 
 | Gap | Workaround today |
@@ -376,6 +447,7 @@ Until then: local loop is complete with `materialize` + `status` + MCP on `brain
 | Boy-scout gate (touched files only) | Skip `verify`; use `status` + slice ratify |
 | `verify` warns on low coverage | Read full gate failure as “81% still legacy” |
 | Stub debt in `status` | Count skips in pytest summary |
+| Scoped `cov-fail-under` in CI | Manual `--no-cov` locally; adjust pyproject/CI per phase above |
 | Track 2 library lift | Separate packet — see homeroom `library-lift-blast-radius.md` |
 
 ---
