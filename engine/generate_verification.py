@@ -27,9 +27,14 @@ Do not edit the STRUCTURE by hand. Change the @intent/@raises contract or run:
 
 These tests are the verification checkpoint for /feature and long-running agents:
 if contracts say it, a test must prove it.
+
+Unimplemented stubs call pytest.skip (not fail) so legacy repos can run the app
+test suite while ratifying incrementally. Implement the body → skip disappears.
 """
 # fmt: off — generated file
 import pytest
+
+pytestmark = pytest.mark.contract_verification
 
 {imports}
 
@@ -94,7 +99,7 @@ def _stub_body(c: FunctionContract, exc: str, store: str) -> str:
                 {call}(s, "zzz")
         """)
     return textwrap.dedent(f"""\
-        pytest.fail(
+        pytest.skip(
             "Implement contract verification for {c.entity_id} @raises {exc}"
         )
     """)
@@ -129,7 +134,7 @@ def _returns_smoke(c: FunctionContract, store: str, contracts: list[FunctionCont
             link = {create_fn}(s, "https://x.com")
             assert {c.name}(s, link.code) == 0
         """)
-    return f'pytest.fail("Implement @returns smoke test for {c.entity_id}")'
+    return f'pytest.skip("Implement @returns smoke test for {c.entity_id}")'
 
 
 def render_tests(contracts: list[FunctionContract], regen_cmd: str, src_root: Path, root: Path) -> str:

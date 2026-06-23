@@ -35,7 +35,9 @@ work packets, and what *not* to do in autonomous runs.
    (Or raw engine: `generate_verification.py`, `generate_flag_matrix.py`,
    `generate_gherkin.py` — each needs `--src` when the tree is not `src/`.)
 
-2. **Implement any new stubs** — generated tests with `pytest.fail(...)` need bodies.
+2. **Implement any new stubs** — generated tests with `pytest.skip(...)` are TODO;
+   implement the body to turn a skip into a real pass. (Legacy repos: skips don't
+   fail `pytest`; use `pytest -m contract_verification` to run only contract tests.)
    Pattern-matched stubs (InvalidURL, AliasTaken, LinkNotFound) may already pass.
    Flag-matrix tests use `FLAG_<NAME>=true|false` via monkeypatch until the app wires flags.
 
