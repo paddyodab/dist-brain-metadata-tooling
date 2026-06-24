@@ -22,7 +22,7 @@ Adapt paths (`--src app` vs `src/`) and runtime for your consumer repo.
 | | Greenfield (`/feature`) | Legacy (this doc) |
 |---|-------------------------|-------------------|
 | Starting rung | Contracts at write time | Rung 0 — sparse brain |
-| Gate scope | All public functions | **Boy-scout** (touched only) — *planned*; today full-repo gate |
+| Gate scope | All public functions | **Boy-scout** (changed functions only) via `gate --since <ref>` (engine shipped; CI wiring pending) |
 | Inference | You write `@intent` | `infer_intent.py` drafts → you ratify |
 | Provenance | `verified` at authoring | `inferred` → engineer flips to `verified` |
 | pytest | Stubs should pass | Stubs **skip** until implemented |
@@ -262,8 +262,10 @@ If you have ratified 12 of 93 symbols, step 1 fails with dozens of missing contr
 Use **`verify`** when:
 
 - adoption is far enough along that the full gate passes, or
-- boy-scout / diff-scoped gate exists (roadmap), or
 - you intentionally want a hard full-repo audit
+
+(For incremental PRs, prefer the **boy-scout gate** — `scripts/brain gate --since <ref>` —
+which gates only the public functions a diff changed. Engine shipped; CI wiring pending.)
 
 **Incremental alternative:**
 
@@ -400,7 +402,8 @@ Raising metadata coverage does not automatically raise line coverage — and tha
 On files/modules you **touch** in a PR:
 
 - New or changed public functions get full contracts (`@intent`, `@param`, …).
-- Tier-1 gate on **diff scope** (when wired) — fail if touched surface lacks metadata.
+- Tier-1 gate on **diff scope** — `scripts/brain gate --since <base>` fails if a *changed*
+  public function lacks metadata (engine shipped; CI wiring pending).
 - Optionally: touched lines need tests (existing team bar, not necessarily 100% repo-wide).
 - `/freshness-review` on changed functions — prose still matches code.
 
@@ -444,7 +447,7 @@ threshold is a **repo policy choice**, not a failure of the metadata approach.
 
 | Gap | Workaround today |
 |-----|------------------|
-| Boy-scout gate (touched files only) | Skip `verify`; use `status` + slice ratify |
+| Boy-scout gate in **CI** (engine done: `gate --since`; needs `fetch-depth:0` + PR base-ref wiring) | Run `scripts/brain gate --since <base>` locally / pre-commit |
 | `verify` warns on low coverage | Read full gate failure as “81% still legacy” |
 | Stub debt in `status` | Count skips in pytest summary |
 | Scoped `cov-fail-under` in CI | Manual `--no-cov` locally; adjust pyproject/CI per phase above |

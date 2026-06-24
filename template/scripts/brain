@@ -4,7 +4,7 @@
 #   materialize [brain-dir]   write brain.sqlite + graph.json (+ wiki render)
 #   refresh [--since ref]      diff-scoped brain.sqlite update, no render (per-turn/goal)
 #   infer <path> [--out file]   draft @intent queue for legacy symbols
-#   gate                        Tier-1 metadata check
+#   gate [--since ref]          Tier-1 metadata check (boy-scout/diff-scoped with --since)
 #   gherkin [--check]           generate (or verify) BDD features
 #   stubs [--check]             generate (or verify) contract test stubs
 #   flags [--check]             generate (or verify) flag-matrix stubs
@@ -71,7 +71,8 @@ case "$cmd" in
     py_src infer_intent --path "$path" "$@"
     ;;
   gate|check)
-    py_src check_metadata
+    # full gate by default; `gate --since <ref>` is the boy-scout (diff-scoped) gate
+    py_src check_metadata "$@"
     ;;
   gherkin)
     py_src generate_gherkin "$@"
