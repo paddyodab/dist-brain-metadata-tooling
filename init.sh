@@ -23,7 +23,7 @@ cp "$HERE/template/CONTRIBUTING.md"          "$TARGET/CONTRIBUTING.md"
 cp "$HERE/template/pull_request_template.md" "$TARGET/.github/pull_request_template.md"
 
 # ---- Grok skills --------------------------------------------------------------
-for skill in feature infra learning freshness-review dist-brain verification orchestrator-handoff brain-ops; do
+for skill in feature infra learning freshness-review dist-brain verification orchestrator-handoff brain-ops ratify; do
   mkdir -p "$TARGET/.grok/skills/$skill"
   cp "$HERE/template/grok/skills/$skill/SKILL.md" "$TARGET/.grok/skills/$skill/SKILL.md"
 done
@@ -66,6 +66,7 @@ echo "    .grok/skills/dist-brain/       (/dist-brain — query MCP brain)"
 echo "    .grok/skills/verification/     (/verification — contract → pytest loop)"
 echo "    .grok/skills/orchestrator-handoff/ (/orchestrator-handoff — plan → packet → delegate)"
 echo "    .grok/skills/brain-ops/           (/brain-ops — scripts/brain CLI)"
+echo "    .grok/skills/ratify/              (/ratify — grill-to-ratify legacy inferences)"
 echo "  Scripts:"
 echo "    scripts/brain                     (materialize, infer, gate, generate, verify, refresh)"
 echo "    scripts/goal_stop_hook.sh         (deterministic /goal oracle — see docs/goal-hook.md)"

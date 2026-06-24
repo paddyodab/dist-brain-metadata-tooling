@@ -157,8 +157,11 @@ module path (`articles.py` → `@feature articles`); confirm, rename, or delete 
 - `Approve #1 and #3; edit #2 @intent to …`
 - `Ratify only app/services/jwt.py drafts`
 
-There is no magic slash command for ratify — it is the same checkpoint as `/feature`:
-**you sign off on contracts.**
+Ratify is the same checkpoint as `/feature` — **you sign off on contracts.** Use the
+**`/ratify`** skill to do it deliberately: it grills you on the *shaky* drafts and refuses
+to ratify **sediment** (an `@intent` that merely restates the method name says nothing the
+signature doesn't — meaning has to be recovered from the code or from you, not rubber-stamped).
+"Ratify all" is the failure mode `/ratify` exists to prevent.
 
 ### Step 3 — Local progress check
 
@@ -308,7 +311,7 @@ Config: `brain.conf` → `BRAIN_SRC`, `BRAIN_DIR`, `DIST_BRAIN_ENGINE`.
 | Run toolchain | `/brain-ops` | `materialize the brain` |
 | Query brain | `/dist-brain` | `what does the brain say about articles?` |
 | Infer slice | `/brain-ops` | `infer app/services/comments.py` |
-| Ratify | — | `approve all drafts as written` |
+| Ratify | `/ratify` | `grill me on the inference queue` |
 | Implement stubs | `/verification` | `implement contract stubs for @feature articles` |
 | Coverage report | `/brain-ops` | `brain status` |
 
