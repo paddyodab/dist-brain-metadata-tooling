@@ -314,6 +314,20 @@ class BrainStore:
                         (revision, e["from"], e["to"], e["type"], e.get("origin")),
                     )
 
+            # Counts reflect the TABLE, not the call's params — so a scoped (diff-only)
+            # upsert records the same totals as a full one. Keeps `main` stats correct
+            # whether the caller passed the whole graph or just the touched slice.
+            ncount = self.conn.execute(
+                "SELECT COUNT(*) FROM nodes WHERE revision_ref=?", (revision,)
+            ).fetchone()[0]
+            ecount = self.conn.execute(
+                "SELECT COUNT(*) FROM edges WHERE revision_ref=?", (revision,)
+            ).fetchone()[0]
+            self.conn.execute(
+                "UPDATE revisions SET node_count=?, edge_count=? WHERE ref=?",
+                (ncount, ecount, revision),
+            )
+
     def snapshot_revision(self, tag_ref: str, sha: str, from_ref: str = DEFAULT_REVISION) -> None:
         """Copy a frozen snapshot (e.g. release tag) from ``from_ref``."""
         stamp = _now()
