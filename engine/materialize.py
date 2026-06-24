@@ -342,16 +342,19 @@ def main() -> int:
     nodes, edges = extract(root, args.src, args.flags)
     print(f"  · extracted {len(nodes)} nodes, {len(edges)} edges")
 
-    prev = json.loads((brain / "graph.json").read_text()) if (brain / "graph.json").exists() else {"nodes": []}
-    delta = diff_nodes(prev["nodes"], nodes)
+    # Prior state for the delta comes from the canonical store (brain.sqlite), NOT
+    # graph.json. graph.json is a derived export that may be huge or absent (--no-json);
+    # diffing against it was wrong at scale and treated every --no-json run as a first run.
+    db_path = brain / "brain.sqlite"
+    store = BrainStore.open(db_path)
+    first_run = not any(r["ref"] == DEFAULT_REVISION for r in store.list_revisions())
+    prev_nodes = store.load_graph(DEFAULT_REVISION)["nodes"]
+    delta = diff_nodes(prev_nodes, nodes)
     changed = bool(delta["added"] or delta["removed"] or delta["changed"])
-    first_run = not (brain / "graph.json").exists()
     print(f"  · delta: +{len(delta['added'])} ~{len(delta['changed'])} -{len(delta['removed'])}")
 
     render(brain, root, nodes, edges, sha, stamp)
 
-    db_path = brain / "brain.sqlite"
-    store = BrainStore.open(db_path)
     store.upsert_main(sha, nodes, edges, delta)
     foot = (
         f"\n\n---\n_Generated from `{sha}` · {stamp}. Derived projection — do not edit; "
