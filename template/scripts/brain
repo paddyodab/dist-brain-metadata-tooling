@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Thin CLI over dist-brain-metadata-tooling/engine/*.py
 # Usage: scripts/brain <command> [args...]
-#   materialize [brain-dir]   write brain.sqlite + graph.json
+#   materialize [brain-dir]   write brain.sqlite + graph.json (+ wiki render)
+#   refresh [--since ref]      diff-scoped brain.sqlite update, no render (per-turn/goal)
 #   infer <path> [--out file]   draft @intent queue for legacy symbols
 #   gate                        Tier-1 metadata check
 #   gherkin [--check]           generate (or verify) BDD features
@@ -59,6 +60,11 @@ case "$cmd" in
     py materialize --src "$SRC" --brain "$out"
     echo "brain: materialized → $out"
     ;;
+  refresh)
+    # diff-scoped, render-less brain.sqlite update (per-turn / goal Stop hook).
+    # Defaults to --include-working so mid-turn edits are reflected; pass --since <ref> to override.
+    py_src refresh_brain --brain "$BRAIN_DIR" --include-working "$@"
+    ;;
   infer)
     path="${1:?usage: scripts/brain infer <file-or-dir>}"
     shift || true
@@ -99,7 +105,7 @@ case "$cmd" in
     fi
     ;;
   help|-h|--help)
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
     echo
     echo "Config (optional $ROOT/brain.conf):"
     echo "  BRAIN_SRC=app          source tree (default: src)"

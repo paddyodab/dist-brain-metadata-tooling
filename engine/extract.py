@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
 from flags_registry import load_flags
@@ -180,24 +181,119 @@ def flag_nodes(flags_path: Path) -> list[dict]:
     return out
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=os.environ.get("GITHUB_WORKSPACE") or ".")
-    ap.add_argument("--src", default=None)
-    ap.add_argument("--flags", default=None)
-    args = ap.parse_args()
+def _is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
 
-    root = Path(args.root).resolve()
-    src_root = Path(args.src).resolve() if args.src else root / "src"
-    flags_path = Path(args.flags).resolve() if args.flags else root / "flags.yml"
 
+def git_changed_paths(root: Path, since: str | None,
+                      include_working: bool) -> tuple[set[str], set[str]]:
+    """Return (changed, deleted) repo-relative paths from git.
+
+    `since` diffs ``<since>..HEAD``; `include_working` adds unstaged + staged edits.
+    Coarse filter only — per-function ``source_sha`` decides actual node changes.
+    """
+    changed: set[str] = set()
+    deleted: set[str] = set()
+
+    def run(*args: str) -> list[str]:
+        try:
+            out = subprocess.run(["git", "-C", str(root), *args],
+                                 capture_output=True, text=True, check=True).stdout
+            return out.splitlines()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return []
+
+    specs: list[list[str]] = []
+    if since:
+        specs.append(["diff", "--name-status", f"{since}..HEAD"])
+    if include_working:
+        specs.append(["diff", "--name-status", "HEAD"])      # unstaged
+        specs.append(["diff", "--name-status", "--cached"])  # staged
+
+    for spec in specs:
+        for line in run(*spec):
+            if not line.strip():
+                continue
+            status, _, path = line.partition("\t")
+            path = path.strip()
+            # renames look like "R100\told\tnew"; take the destination
+            if status.startswith("R") and "\t" in path:
+                path = path.split("\t")[-1].strip()
+            (deleted if status.startswith("D") else changed).add(path)
+    return changed, deleted
+
+
+def extract_full(root: Path, src_root: Path, flags_path: Path) -> dict:
     nodes = list(flag_nodes(flags_path)) + adr_nodes(root)
     edges: list[dict] = []
     for f in sorted(src_root.rglob("*.py")):
         n, e = extract_file(f, root)
         nodes.extend(n)
         edges.extend(e)
-    print(json.dumps({"nodes": nodes, "edges": edges}))
+    return {"nodes": nodes, "edges": edges, "scope": None}
+
+
+def extract_scoped(root: Path, src_root: Path, flags_path: Path,
+                   changed: set[str], deleted: set[str]) -> dict:
+    """Re-extract only in-scope files. The ``scope`` block tells the consumer which
+    source paths are authoritative this run (only those may have nodes removed)."""
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    touched = changed | deleted
+
+    # small categories are cheap — re-extract wholesale if their file is in scope
+    if any(Path(p).name == flags_path.name for p in touched):
+        nodes += flag_nodes(flags_path)
+    if any(p.startswith("decisions/") for p in touched):
+        nodes += adr_nodes(root)
+
+    for p in sorted(changed):
+        f = (root / p)
+        if not p.endswith(".py") or not f.exists() or not _is_under(f, src_root):
+            continue
+        n, e = extract_file(f, root)
+        nodes.extend(n)
+        edges.extend(e)
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "scope": {"paths": sorted(changed), "deleted": sorted(deleted)},
+    }
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=os.environ.get("GITHUB_WORKSPACE") or ".")
+    ap.add_argument("--src", default=None)
+    ap.add_argument("--flags", default=None)
+    ap.add_argument("--since", default=None,
+                    help="only re-extract files changed since this git ref (diff <ref>..HEAD)")
+    ap.add_argument("--changed", action="append", default=None,
+                    help="only re-extract this repo-relative path (repeatable)")
+    ap.add_argument("--include-working", action="store_true",
+                    help="with --since/--changed, also include unstaged + staged edits")
+    args = ap.parse_args()
+
+    root = Path(args.root).resolve()
+    src_root = Path(args.src).resolve() if args.src else root / "src"
+    flags_path = Path(args.flags).resolve() if args.flags else root / "flags.yml"
+
+    scoped = bool(args.since or args.changed or args.include_working)
+    if not scoped:
+        result = extract_full(root, src_root, flags_path)
+    else:
+        if args.changed:
+            changed, deleted = set(args.changed), set()
+        else:
+            changed, deleted = git_changed_paths(root, args.since, args.include_working)
+        result = extract_scoped(root, src_root, flags_path, changed, deleted)
+
+    print(json.dumps(result))
     return 0
 
 
