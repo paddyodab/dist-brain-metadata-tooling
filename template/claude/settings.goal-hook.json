@@ -1,0 +1,16 @@
+{
+  "//": "Merge this into your repo's .claude/settings.json. Installs the deterministic /goal oracle as a Stop hook. It no-ops unless DIST_BRAIN_GOAL=1, so launch a goal run with: DIST_BRAIN_GOAL=1 claude  then  /goal <condition>. See docs/goal-hook.md.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/goal_stop_hook.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
