@@ -31,7 +31,13 @@ done
 mkdir -p "$TARGET/scripts"
 cp "$HERE/template/scripts/brain" "$TARGET/scripts/brain"
 chmod +x "$TARGET/scripts/brain"
+cp "$HERE/template/scripts/goal_stop_hook.sh" "$TARGET/scripts/goal_stop_hook.sh"
+chmod +x "$TARGET/scripts/goal_stop_hook.sh"
 cp "$HERE/template/brain.conf.example" "$TARGET/brain.conf.example"
+
+# Deterministic /goal oracle (Claude Code Stop hook) — example settings to merge.
+mkdir -p "$TARGET/.claude"
+cp "$HERE/template/claude/settings.goal-hook.json" "$TARGET/.claude/settings.goal-hook.json"
 
 # ---- Grok MCP config (optional) -----------------------------------------------
 if [[ -n "$WIKI_REPO" ]]; then
@@ -61,7 +67,9 @@ echo "    .grok/skills/verification/     (/verification — contract → pytest 
 echo "    .grok/skills/orchestrator-handoff/ (/orchestrator-handoff — plan → packet → delegate)"
 echo "    .grok/skills/brain-ops/           (/brain-ops — scripts/brain CLI)"
 echo "  Scripts:"
-echo "    scripts/brain                     (materialize, infer, gate, generate, verify)"
+echo "    scripts/brain                     (materialize, infer, gate, generate, verify, refresh)"
+echo "    scripts/goal_stop_hook.sh         (deterministic /goal oracle — see docs/goal-hook.md)"
+echo "    .claude/settings.goal-hook.json   (Stop-hook fragment to merge into .claude/settings.json)"
 echo "    brain.conf.example                (copy → brain.conf for BRAIN_SRC / paths)"
 echo "  Claude commands (legacy):"
 echo "    .claude/commands/feature.md"
