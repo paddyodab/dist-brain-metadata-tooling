@@ -21,8 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: paddyodab/dist-brain-metadata-tooling@v1
         with:
           mode: gate
           src: ${{ inputs.src }}
           flags: ${{ inputs.flags }}
+          since: ${{ github.event.pull_request.base.sha }}
