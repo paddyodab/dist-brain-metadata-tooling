@@ -75,6 +75,23 @@ def list_decisions(source: str = "", revision: str = "") -> list:
     return _brain(revision).decisions(source=source or None)
 
 
+@mcp.tool()
+def history(id: str, revision: str = "") -> list:
+    """Intent-change timeline for an entity: every commit where its @intent changed,
+    with the intent text at that point (oldest first) — 'how did this guarantee evolve?'.
+    Sourced from the intent_history WAL; sqlite brains only (empty for JSON brains)."""
+    return _brain(revision).history(id)
+
+
+@mcp.tool()
+def why(id: str, revision: str = "") -> dict:
+    """Why an entity is the way it is: current intent, provenance status
+    (verified|inferred), lineage (first_seen/last_touched sha), what governs it
+    (flags via gated-by, linked decisions), and how many times its intent changed.
+    Pairs with history() for the full when/why provenance story."""
+    return _brain(revision).why(id)
+
+
 if __name__ == "__main__":
     print(
         f"dist-brain MCP listening on stdio ({SOURCE}, revision={DEFAULT_REVISION_ENV})",

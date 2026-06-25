@@ -399,6 +399,16 @@ class BrainStore:
             "last_touched_sha": row["last_touched_sha"],
         }
 
+    def history(self, entity_id: str, revision: str = DEFAULT_REVISION) -> list[dict]:
+        """The intent-change timeline for one entity: each commit where its @intent
+        changed, oldest first. This is the meaning-stream (the WAL of meaning) for an id."""
+        rows = self.conn.execute(
+            "SELECT sha, intent, recorded_at FROM intent_history "
+            "WHERE revision_ref=? AND entity_id=? ORDER BY id",
+            (revision, entity_id),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def load_graph(self, revision: str = DEFAULT_REVISION) -> dict:
         rev = self.conn.execute(
             "SELECT * FROM revisions WHERE ref=?", (revision,)
