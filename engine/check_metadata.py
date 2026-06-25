@@ -27,7 +27,9 @@ import subprocess
 from pathlib import Path
 
 from contract_lib import (
+    collect_contracts,
     documented_params,
+    is_sediment_intent,
     parse_tags,
     raised_types,
     returns_value,
@@ -144,11 +146,31 @@ def scoped_check(root: Path, src_root: Path, known_flags: set[str],
     return errors
 
 
+def sediment_report(root: Path, src_root: Path, fail: bool) -> int:
+    """Advisory no-op lint: flag @intent that merely restates the symbol name (sediment).
+    The deterministic pre-filter for /ratify — meaning has to be recovered, not rubber-stamped."""
+    contracts = collect_contracts(src_root, root)
+    flagged = [c for c in contracts if c.intent and is_sediment_intent(c.name, c.intent)]
+    if not flagged:
+        print(f"No-op lint: no sediment ✓  ({len(contracts)} contract(s) scanned)")
+        return 0
+    print("No-op lint — @intent restates the name (sediment). Recover real meaning via /ratify:\n")
+    for c in flagged:
+        print(f'  ⚠ {c.loc}: @intent "{c.intent}" adds nothing over `{c.name}`')
+    tail = "Failing (--fail-on-sediment)." if fail else "Advisory — not a build break."
+    print(f"\n{len(flagged)} sediment of {len(contracts)} scanned. {tail}")
+    return 1 if fail else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.environ.get("GITHUB_WORKSPACE") or ".")
     ap.add_argument("--src", default=None)
     ap.add_argument("--flags", default=None)
+    ap.add_argument("--no-op-lint", action="store_true",
+                    help="advisory: flag @intent that merely restates the name (sediment)")
+    ap.add_argument("--fail-on-sediment", action="store_true",
+                    help="with --no-op-lint, exit non-zero on findings")
     ap.add_argument("--since", default=None,
                     help="boy-scout mode: gate only functions changed since this git ref")
     ap.add_argument("--changed", action="append", default=None,
@@ -159,6 +181,10 @@ def main() -> int:
 
     root = Path(args.root).resolve()
     src_root = Path(args.src).resolve() if args.src else root / "src"
+
+    if args.no_op_lint:
+        return sediment_report(root, src_root, args.fail_on_sediment)
+
     flags_path = Path(args.flags).resolve() if args.flags else root / "flags.yml"
     known_flags = set(load_flags(flags_path))
 
