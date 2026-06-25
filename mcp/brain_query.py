@@ -301,6 +301,35 @@ class Brain:
                    for e in self.edges if e["to"] == node_id],
         }
 
+    def history(self, node_id: str) -> list[dict]:
+        """Intent-change timeline for an entity (sqlite brains only; [] otherwise)."""
+        if self._store:
+            return self._store.history(node_id, revision=self.revision)
+        return []
+
+    def why(self, node_id: str) -> dict:
+        """Provenance story for an entity: current intent, status (verified|inferred),
+        lineage shas, what governs it (flags via gated-by, linked decisions), and how
+        many times its intent has changed. Pairs with history() for the timeline."""
+        node = next((n for n in self.nodes if n["id"] == node_id), None)
+        if node is None:
+            return {"error": f"no entity with id {node_id!r}"}
+        prov = node.get("provenance") or {}
+        governed_by = sorted({
+            e["to"] for e in self.edges if e["from"] == node_id
+            and (e.get("type") in ("gated-by", "governed-by") or e["to"].startswith("decision:"))
+        })
+        return {
+            "id": node_id,
+            "intent": node.get("intent"),
+            "status": prov.get("status"),
+            "source": prov.get("source_path"),
+            "first_seen_sha": node.get("first_seen_sha"),
+            "last_touched_sha": node.get("last_touched_sha"),
+            "governed_by": governed_by,
+            "intent_changes": len(self.history(node_id)),
+        }
+
     def decisions(self, source: str | None = None) -> list[dict]:
         return [{"id": n["id"], "title": n["title"], "status": n["facts"].get("status"),
                  "summary": n.get("intent"), "source": n.get("source")}

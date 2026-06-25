@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from brain_query import Brain, merge_graphs, parse_sources
+from brain_store import BrainStore  # brain_query puts engine/ on sys.path at import
 
 
 class SearchTests(unittest.TestCase):
@@ -116,6 +117,74 @@ class SqliteBrainTests(unittest.TestCase):
         hits = brain.search("custom aliases")
         ids = {h["id"] for h in hits}
         self.assertTrue(ids)
+
+
+class HistoryWhyTests(unittest.TestCase):
+    """history()/why() over a real sqlite brain with an intent change across two revisions."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+        self.tmp.close()
+        self.path = Path(self.tmp.name)
+        store = BrainStore.open(self.path)
+        alpha0 = {"id": "src/m.py#alpha", "type": "function", "title": "alpha",
+                  "intent": "Alpha returns x.", "subsystem": "python:m",
+                  "facts": {"params": ["x"], "returns": "int", "raises": [], "flag": "f"},
+                  "provenance": {"source_path": "src/m.py", "source_sha": "aaa",
+                                 "status": "inferred"}}
+        flag = {"id": "flag:f", "type": "flag", "title": "f", "intent": "toggle",
+                "subsystem": "flags", "facts": {},
+                "provenance": {"source_path": "flags.yml", "source_sha": "f1",
+                               "status": "verified"}}
+        edges = [{"from": "src/m.py#alpha", "to": "flag:f", "type": "gated-by",
+                  "origin": "authored"}]
+        store.upsert_main("sha0", [alpha0, flag], edges,
+                          {"added": [alpha0, flag], "removed": [], "changed": []})
+        alpha1 = {**alpha0, "intent": "Alpha now doubles x.",
+                  "provenance": {"source_path": "src/m.py", "source_sha": "bbb",
+                                 "status": "verified"}}
+        store.upsert_main("sha1", [alpha1, flag], edges,
+                          {"added": [], "removed": [], "changed": [alpha1]})
+        store.close()
+        self.brain = Brain(str(self.path), revision="main").load()
+
+    def tearDown(self) -> None:
+        self.path.unlink(missing_ok=True)
+
+    def test_history_is_the_intent_timeline(self) -> None:
+        h = self.brain.history("src/m.py#alpha")
+        self.assertEqual([r["intent"] for r in h],
+                         ["Alpha returns x.", "Alpha now doubles x."])
+        self.assertEqual([r["sha"] for r in h], ["sha0", "sha1"])
+
+    def test_why_surfaces_provenance_lineage_and_governance(self) -> None:
+        w = self.brain.why("src/m.py#alpha")
+        self.assertEqual(w["intent"], "Alpha now doubles x.")
+        self.assertEqual(w["status"], "verified")       # inferred → verified
+        self.assertEqual(w["first_seen_sha"], "sha0")    # born at sha0
+        self.assertEqual(w["last_touched_sha"], "sha1")  # last changed at sha1
+        self.assertIn("flag:f", w["governed_by"])        # gated-by edge
+        self.assertEqual(w["intent_changes"], 2)
+
+    def test_why_missing_entity(self) -> None:
+        self.assertIn("error", self.brain.why("nope#nope"))
+
+
+class WhyJsonModeTests(unittest.TestCase):
+    """why() works without sqlite — lineage/governance come from the graph; history is []."""
+
+    def test_why_from_json_graph(self) -> None:
+        graph = {"nodes": [{"id": "src/a.py#fn", "type": "function", "title": "fn",
+                            "intent": "does a thing",
+                            "provenance": {"source_path": "src/a.py", "status": "inferred"}}],
+                 "edges": [{"from": "src/a.py#fn", "to": "flag:x", "type": "gated-by"}]}
+        brain = Brain("unused")
+        brain._graph = graph
+        w = brain.why("src/a.py#fn")
+        self.assertEqual(w["status"], "inferred")
+        self.assertIn("flag:x", w["governed_by"])
+        self.assertEqual(w["intent_changes"], 0)         # no sqlite → no history
+        self.assertEqual(brain.history("src/a.py#fn"), [])
 
 
 if __name__ == "__main__":
