@@ -119,6 +119,46 @@ class SqliteBrainTests(unittest.TestCase):
         self.assertTrue(ids)
 
 
+class DecisionsKindTests(unittest.TestCase):
+    """list_decisions surfaces kind/enforcement and can filter to the house rules."""
+
+    def setUp(self) -> None:
+        graph = {
+            "nodes": [
+                {"id": "decision:0001-record", "type": "decision", "title": "A record",
+                 "intent": "retrospective", "facts": {"status": "Accepted", "kind": "record"}},
+                {"id": "decision:0007-pact", "type": "decision", "title": "Use Pact",
+                 "intent": "premise", "facts": {"status": "accepted", "kind": "constraint",
+                 "enforcement": "deterministic", "applies_to": "boundaries"}},
+            ],
+            "edges": [],
+        }
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(graph, tmp)
+        tmp.close()
+        self.brain = Brain(tmp.name).load()
+        self._tmp_path = Path(tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp_path.unlink(missing_ok=True)
+
+    def test_all_decisions_carry_kind(self) -> None:
+        kinds = {d["id"]: d["kind"] for d in self.brain.decisions()}
+        self.assertEqual(kinds["decision:0001-record"], "record")
+        self.assertEqual(kinds["decision:0007-pact"], "constraint")
+
+    def test_filter_to_constraints(self) -> None:
+        rules = self.brain.decisions(kind="constraint")
+        self.assertEqual([d["id"] for d in rules], ["decision:0007-pact"])
+        self.assertEqual(rules[0]["enforcement"], "deterministic")
+        self.assertEqual(rules[0]["applies_to"], "boundaries")
+
+    def test_overview_reports_kind(self) -> None:
+        kinds = {d["id"]: d["kind"] for d in self.brain.overview()["decisions"]}
+        self.assertEqual(kinds["decision:0001-record"], "record")
+        self.assertEqual(kinds["decision:0007-pact"], "constraint")
+
+
 class HistoryWhyTests(unittest.TestCase):
     """history()/why() over a real sqlite brain with an intent change across two revisions."""
 

@@ -32,7 +32,11 @@ server exposes it as query tools. Use these instead of re-scanning the whole rep
 4. **`dist_brain__get_entity`** — full record for one stable id (cite ids in summaries).
    Joined ids are prefixed: `my-app:src/linkshort/shorten.py#create_short_link`.
 5. **`dist_brain__neighbors`** — graph edges in/out for impact analysis.
-6. **`dist_brain__list_decisions`** — all ADRs; optional `source` when joined.
+6. **`dist_brain__list_decisions`** — ADRs; optional `source` when joined. Pass
+   `kind="constraint"` for the **house rules** — forward-looking premises (e.g. "must
+   use a monorepo", "every boundary has a Pact") that bound what you may design, not just
+   retrospective records. Each carries `enforcement` (advisory/semantic/deterministic);
+   deterministic ones are gated by `scripts/brain constraints`.
 7. **`dist_brain__why`** — provenance for one id: current intent, status
    (verified|inferred), lineage shas, what governs it, intent-change count. "Why is it this way?"
 8. **`dist_brain__history`** — the intent-change timeline for one id (each commit where its

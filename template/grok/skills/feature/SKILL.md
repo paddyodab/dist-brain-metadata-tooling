@@ -21,6 +21,20 @@ The core move: the "here's my plan, do you agree?" checkpoint becomes a
 
 ## Steps
 
+0. **Consult the house rules first — they bound the question space.** Before
+   drafting anything, read the accepted constraint ADRs:
+
+   ```bash
+   scripts/brain constraints        # lists house rules; runs the rung-3 gates
+   ```
+
+   or query the brain: `dist_brain__list_decisions(kind="constraint")`. These are
+   *premises*, not suggestions. If the plan would violate one ("split this into its
+   own repo" under a monorepo ADR; a service boundary with no Pact), **surface the
+   conflict** — don't quietly design around it. The move is either *stay within the
+   constraint* or *propose superseding the ADR* (flip its `status`, add the
+   replacement) — never silently break it.
+
 1. **Source the intent — don't invent it.** Use what you and the engineer agreed
    in this conversation (and any ticket they named). If the plan is unclear on
    *why* a function exists or what it guarantees, ask before coding.

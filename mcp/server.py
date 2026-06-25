@@ -70,9 +70,10 @@ def neighbors(id: str, revision: str = "") -> dict:
 
 
 @mcp.tool()
-def list_decisions(source: str = "", revision: str = "") -> list:
-    """List ADRs with status and one-line summary."""
-    return _brain(revision).decisions(source=source or None)
+def list_decisions(source: str = "", revision: str = "", kind: str = "") -> list:
+    """List ADRs with status, kind, and one-line summary. Pass kind='constraint'
+    for the house rules (forward-looking premises) or 'record' for retrospective ADRs."""
+    return _brain(revision).decisions(source=source or None, kind=kind or None)
 
 
 @mcp.tool()

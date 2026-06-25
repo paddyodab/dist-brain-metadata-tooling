@@ -142,24 +142,67 @@ def adr_summary(text: str) -> str:
     return ""
 
 
+def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    """Split an optional leading ``---`` YAML-ish fence from a markdown body.
+
+    Returns ``(frontmatter, body)``. Stdlib-only: parses flat ``key: value`` pairs
+    (the subset ADRs use — id/title/status/kind/enforcement/gate/applies_to); nested
+    or list values are ignored, never fatal. No fence → ``({}, text)`` so record ADRs
+    with no frontmatter pass through untouched.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return {}, text  # unterminated fence — treat the whole file as body
+    fm: dict[str, str] = {}
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, sep, val = line.partition(":")
+        if sep:
+            fm[key.strip().lower()] = val.strip().strip('"').strip("'")
+    return fm, "\n".join(lines[end + 1:])
+
+
 def adr_nodes(root: Path) -> list[dict]:
-    """Ingest decisions/*.md (ADRs) as decision nodes — the cross-cutting 'why'."""
+    """Ingest decisions/*.md (ADRs) as decision nodes — the cross-cutting 'why'.
+
+    Optional frontmatter (``kind: record|constraint``, ``status``, ``enforcement``,
+    ``gate``, ``applies_to``) is parsed into ``facts`` so the materializer and
+    ``check_constraints`` can act on constraint ADRs (§3 fidelity ladder). A bare
+    record ADR (no fence) keeps its historic shape; ``kind`` defaults to ``record``.
+    """
     d = root / "decisions"
     out: list[dict] = []
     if not d.exists():
         return out
     for f in sorted(d.glob("*.md")):
-        text = f.read_text()
-        title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), f.stem)
-        status = next((l.split("**Status:**", 1)[1].strip()
-                       for l in text.splitlines() if "**Status:**" in l), None)
+        raw = f.read_text()
+        fm, body = split_frontmatter(raw)
+        title = fm.get("title") or next(
+            (l[2:].strip() for l in body.splitlines() if l.startswith("# ")), f.stem)
+        status = fm.get("status") or next(
+            (l.split("**Status:**", 1)[1].strip()
+             for l in body.splitlines() if "**Status:**" in l), None)
+        kind = (fm.get("kind") or "record").lower()
+        facts: dict = {"status": status, "kind": kind}
+        if kind == "constraint":
+            facts["enforcement"] = (fm.get("enforcement") or "advisory").lower()
+            if fm.get("gate"):
+                facts["gate"] = fm["gate"]
+            if fm.get("applies_to"):
+                facts["applies_to"] = fm["applies_to"]
+        if fm.get("id"):
+            facts["adr_id"] = fm["id"]
         out.append({
             "id": f"decision:{f.stem}", "type": "decision", "title": title,
-            "intent": adr_summary(text),
-            "facts": {"status": status},
+            "intent": adr_summary(body),
+            "facts": facts,
             "subsystem": "decisions",
             "provenance": {"source_path": str(f.relative_to(root)),
-                           "source_sha": hashlib.sha1(text.encode()).hexdigest()[:12],
+                           "source_sha": hashlib.sha1(raw.encode()).hexdigest()[:12],
                            "status": "verified", "extracted_by": "adr@1"},
         })
     return out
