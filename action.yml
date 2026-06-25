@@ -19,6 +19,9 @@ inputs:
   wiki-repo:
     description: "owner/repo whose wiki to publish to (materialize mode)"
     default: ${{ github.repository }}
+  since:
+    description: "boy-scout mode: gate only functions changed since this git ref (PR base SHA)"
+    default: ""
   wiki-token:
     description: "PAT with repo scope for wiki push (materialize mode)"
     default: ""
@@ -32,10 +35,9 @@ runs:
       if: inputs.mode == 'gate'
       shell: bash
       run: |
-        python3 "$GITHUB_ACTION_PATH/engine/check_metadata.py" \
-          --root "$GITHUB_WORKSPACE" \
-          --src "$GITHUB_WORKSPACE/${{ inputs.src }}" \
-          --flags "$GITHUB_WORKSPACE/${{ inputs.flags }}"
+        ARGS=(--root "$GITHUB_WORKSPACE" --src "$GITHUB_WORKSPACE/${{ inputs.src }}" --flags "$GITHUB_WORKSPACE/${{ inputs.flags }}")
+        if [ -n "${{ inputs.since }}" ]; then ARGS+=(--since "${{ inputs.since }}"); fi
+        python3 "$GITHUB_ACTION_PATH/engine/check_metadata.py" "${ARGS[@]}"
     - name: Contract verification stubs (must be up to date)
       if: inputs.mode == 'verify'
       shell: bash
