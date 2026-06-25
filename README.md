@@ -11,8 +11,8 @@ product repo carries config + a thin workflow instead of copy-pasting the engine
 ## What's here
 
 - **`action.yml`** — a composite action (`mode: gate | materialize`).
-- **`engine/`** — the scripts (`check_metadata.py`, `extract.py`, `materialize.py`,
-  `check_tags.py`, `flags_registry.py`, `publish_wiki.sh`). They analyze a target
+- **`engine/`** — the scripts (`check_metadata.py`, `check_constraints.py`, `extract.py`,
+  `materialize.py`, `check_tags.py`, `flags_registry.py`, `publish_wiki.sh`). They analyze a target
   repo via `--root` (default `$GITHUB_WORKSPACE`), so the engine's location is
   decoupled from the repo it inspects.
 - **`.github/workflows/gate.yml`, `wiki.yml`, `tags.yml`** — `workflow_call` reusable workflows.
@@ -175,6 +175,10 @@ more than they need autonomy.
 **Legacy / existing codebases:** [`docs/legacy-adoption-workflow.md`](docs/legacy-adoption-workflow.md)
 — inference → ratify → `scripts/brain` local loop (validated walkthrough; incremental
 adoption, stub skips, when *not* to run full `verify`).
+
+**House rules that gate:** [`docs/constraint-adrs.md`](docs/constraint-adrs.md) — record vs
+constraint ADRs, the fidelity ladder, frontmatter, and the `check_constraints` rung-3 gate
+(`scripts/brain constraints`).
 
 `engine/generate_verification.py` turns `@raises` / `@returns` contracts into
 `tests/generated/test_contract_verification.py`. Companion generators:

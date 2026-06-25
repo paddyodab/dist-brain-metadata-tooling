@@ -135,6 +135,14 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
     entities = [n for n in nodes if n["type"] in ("function", "method")]
     flags = [n for n in nodes if n["type"] == "flag"]
     decisions = [n for n in nodes if n["type"] == "decision"]
+    # House rules = accepted constraint ADRs (§3 rung 2+): forward-looking premises every
+    # later step must respect. Split them out of the record-ADR list so the two don't double.
+    house_rules = [
+        d for d in decisions
+        if d["facts"].get("kind") == "constraint"
+        and (d["facts"].get("status") or "").lower() == "accepted"
+    ]
+    record_decisions = [d for d in decisions if d not in house_rules]
     resources = [n for n in nodes if n["type"] == "resource"]
     req_tags = required_tags(root)
     gated_by: dict[str, list[str]] = {}
@@ -197,9 +205,24 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
         flines.append("")
     (brain / "Features.md").write_text("\n".join(flines) + foot)
 
-    # Decisions.md — ADRs (cross-cutting 'why'), human view
+    # Decisions.md — ADRs (cross-cutting 'why'), human view. House rules (accepted
+    # constraint ADRs) lead — they're prescriptive premises, not just retrospective record.
     dlines = ["# Decisions", "", "Architecture decision records — the cross-cutting *why*.", ""]
-    for d in sorted(decisions, key=lambda x: x["id"]):
+    if house_rules:
+        dlines += ["## House rules (constraint ADRs)", "",
+                   "Forward-looking premises every change must respect. "
+                   "Enforced by `check_constraints` per their `enforcement`.", ""]
+        for d in sorted(house_rules, key=lambda x: x["id"]):
+            df = d["facts"]
+            dlines += [f"### {d['title']}", "",
+                       f"- **enforcement:** {df.get('enforcement') or 'advisory'}",
+                       f"- **applies to:** {df.get('applies_to') or '—'}",
+                       f"- **gate:** {('`' + df['gate'] + '`') if df.get('gate') else '—'}",
+                       f"- **id:** `{d['id']}`", "",
+                       d.get("intent") or "",
+                       f"- _source:_ `{d['provenance']['source_path']}`", ""]
+        dlines += ["## Records", ""]
+    for d in sorted(record_decisions, key=lambda x: x["id"]):
         dlines += [f"## {d['title']}", "",
                    f"- **status:** {d['facts'].get('status') or '—'}",
                    f"- **id:** `{d['id']}`", "",
@@ -253,8 +276,16 @@ def render(brain: Path, root: Path, nodes, edges, sha, stamp) -> dict:
         feature, page = runbook_link[fl["id"]]
         ag.append(f"- {feature}: to toggle flip `{fl['title']}` "
                   f"(default {fl['facts'].get('default')}); see [{page}]({page})")
+    if house_rules:
+        ag += ["", "## House rules (constraint ADRs — premises, must respect)", ""]
+        for d in sorted(house_rules, key=lambda x: x["id"]):
+            df = d["facts"]
+            applies = f" — applies to: {df['applies_to']}" if df.get("applies_to") else ""
+            ag.append(f"- `{d['id']}` [{df.get('enforcement') or 'advisory'}] — {d['title']}{applies}")
+            if d.get("intent"):
+                ag.append(f"    {d['intent']}")
     ag += ["", "## Decisions (ADRs)", ""]
-    for d in sorted(decisions, key=lambda x: x["id"]):
+    for d in sorted(record_decisions, key=lambda x: x["id"]):
         ag.append(f"- `{d['id']}` — {d['title']} — {d['facts'].get('status') or ''}")
         if d.get("intent"):
             ag.append(f"    {d['intent']}")

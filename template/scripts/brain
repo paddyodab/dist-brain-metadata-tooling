@@ -5,6 +5,7 @@
 #   refresh [--since ref]      diff-scoped brain.sqlite update, no render (per-turn/goal)
 #   infer <path> [--out file]   draft @intent queue for legacy symbols
 #   gate [--since ref]          Tier-1 metadata check (boy-scout/diff-scoped with --since)
+#   constraints                 enforce accepted constraint ADRs (rung-3 gate runner)
 #   lint                        advisory no-op lint: flag @intent that restates the name (sediment)
 #   gherkin [--check]           generate (or verify) BDD features
 #   stubs [--check]             generate (or verify) contract test stubs
@@ -75,6 +76,11 @@ case "$cmd" in
     # full gate by default; `gate --since <ref>` is the boy-scout (diff-scoped) gate
     py_src check_metadata "$@"
     ;;
+  constraints|adr-gate)
+    # rung-3 constraint gate: enforce accepted constraint ADRs (deterministic gates run,
+    # advisory/semantic reported). Reads decisions/ — no --src needed.
+    py check_constraints "$@"
+    ;;
   lint)
     # advisory no-op lint: flag @intent that merely restates the name (sediment)
     py_src check_metadata --no-op-lint "$@"
@@ -111,7 +117,7 @@ case "$cmd" in
     fi
     ;;
   help|-h|--help)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
     echo
     echo "Config (optional $ROOT/brain.conf):"
     echo "  BRAIN_SRC=app          source tree (default: src)"
