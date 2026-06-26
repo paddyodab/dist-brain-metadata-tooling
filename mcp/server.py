@@ -31,12 +31,13 @@ def _brain(revision: str = "") -> Brain:
 
 
 @mcp.tool()
-def overview(revision: str = "") -> dict:
+def overview(revision: str = "", context: str = "") -> dict:
     """Get a high-level map of the codebase: entity/flag/decision/house-rule counts,
-    modules, flags, ADRs, and house rules. Call first. SQLite brains include
-    storage=sqlite and available revisions. Use revision= to query a release tag instead
-    of main."""
-    return _brain(revision).overview()
+    modules, flags, ADRs, house rules, and a per-context breakdown. Call first.
+    SQLite brains include storage=sqlite and available revisions. Use revision= to query
+    a release tag instead of main. Use context= to scope to one bounded context
+    (empty = all contexts)."""
+    return _brain(revision).overview(context=context or None)
 
 
 @mcp.tool()
@@ -52,10 +53,11 @@ def list_sources() -> list:
 
 
 @mcp.tool()
-def search(query: str, source: str = "", revision: str = "") -> list:
+def search(query: str, context: str = "", source: str = "", revision: str = "") -> list:
     """FTS5/search over entity ids, titles, and intent. Cite stable ids in summaries.
-    revision= for tag snapshots; source= for joined JSON repos only."""
-    return _brain(revision).search(query, source=source or None)
+    revision= for tag snapshots; source= for joined JSON repos only; context= scopes
+    to one bounded context (empty = all contexts)."""
+    return _brain(revision).search(query, source=source or None, context=context or None)
 
 
 @mcp.tool()
@@ -65,9 +67,10 @@ def get_entity(id: str, revision: str = "") -> dict:
 
 
 @mcp.tool()
-def neighbors(id: str, revision: str = "") -> dict:
-    """Graph neighbors for impact analysis (raises, gated-by, …)."""
-    return _brain(revision).neighbors(id)
+def neighbors(id: str, context: str = "", revision: str = "") -> dict:
+    """Graph neighbors for impact analysis (raises, gated-by, …). context= limits the
+    returned neighbor nodes to one bounded context (empty = all contexts)."""
+    return _brain(revision).neighbors(id, context=context or None)
 
 
 @mcp.tool()

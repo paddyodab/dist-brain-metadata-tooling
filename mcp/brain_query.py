@@ -226,27 +226,38 @@ class Brain:
             }]
         return []
 
-    def _filter_nodes(self, nodes: list[dict], source: str | None) -> list[dict]:
-        if not source:
-            return nodes
-        return [n for n in nodes if n.get("source") == source]
+    def _filter_nodes(self, nodes: list[dict], source: str | None,
+                      context: str | None = None) -> list[dict]:
+        if source:
+            nodes = [n for n in nodes if n.get("source") == source]
+        if context is not None:
+            nodes = [n for n in nodes if n.get("context") == context]
+        return nodes
 
     # ---- queries ----------------------------------------------------------
 
-    def overview(self) -> dict:
+    def overview(self, context: str | None = None) -> dict:
         by_type: dict[str, int] = {}
-        for n in self.nodes:
+        for n in self._filter_nodes(self.nodes, None, context):
             by_type[n["type"]] = by_type.get(n["type"], 0) + 1
-        modules = sorted({n["subsystem"] for n in self.nodes if n["type"] in ("function", "method")})
-        flags = sorted(n["title"] for n in self.nodes if n["type"] == "flag")
+        modules = sorted({n["subsystem"] for n in self._filter_nodes(self.nodes, None, context)
+                          if n["type"] in ("function", "method")})
+        flags = sorted(n["title"] for n in self._filter_nodes(self.nodes, None, context)
+                       if n["type"] == "flag")
         decisions = [{"id": n["id"], "title": n["title"], "status": n["facts"].get("status"),
                       "source": n.get("source")}
-                     for n in self.nodes if n["type"] == "decision"]
+                     for n in self._filter_nodes(self.nodes, None, context)
+                     if n["type"] == "decision"]
         house_rules = [{"id": n["id"], "title": n["title"], "status": n["facts"].get("status"),
                         "enforcement": n["facts"].get("enforcement"),
                         "applies_to": n["facts"].get("applies_to"),
                         "source": n.get("source")}
-                       for n in self.nodes if n["type"] == "house-rule"]
+                       for n in self._filter_nodes(self.nodes, None, context)
+                       if n["type"] == "house-rule"]
+        by_context: dict[str, int] = {}
+        for n in self.nodes:
+            ctx = n.get("context") or "root"
+            by_context[ctx] = by_context.get(ctx, 0) + 1
         return {
             "joined": self._graph.get("joined", False),
             "storage": self._graph.get("storage"),
@@ -259,18 +270,21 @@ class Brain:
             "flags": flags,
             "decisions": decisions,
             "house_rules": house_rules,
+            "contexts": by_context,
         }
 
-    def search(self, query: str, limit: int = 12, source: str | None = None) -> list[dict]:
+    def search(self, query: str, limit: int = 12, source: str | None = None,
+               context: str | None = None) -> list[dict]:
         """Match nodes whose id/title/intent contain every query token (AND)."""
         if self._store and not source:
-            return self._store.search(query, revision=self.revision, limit=limit)
+            return self._store.search(query, revision=self.revision, limit=limit,
+                                      context=context)
         tokens = [t for t in query.lower().split() if t]
         if not tokens:
             return []
 
         scored: list[tuple[int, dict]] = []
-        for n in self._filter_nodes(self.nodes, source):
+        for n in self._filter_nodes(self.nodes, source, context):
             hay = " ".join(str(x) for x in (n["id"], n.get("title"), n.get("intent"))).lower()
             words = _hay_words(hay)
             if not all(_token_matches(tok, hay, words) for tok in tokens):
@@ -284,6 +298,7 @@ class Brain:
                 "title": n.get("title"),
                 "intent": n.get("intent"),
                 "source": n.get("source"),
+                "context": n.get("context"),
             }))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -299,12 +314,22 @@ class Brain:
             "edges_in": [e for e in self.edges if e["to"] == node_id],
         }
 
-    def neighbors(self, node_id: str) -> dict:
+    def neighbors(self, node_id: str, context: str | None = None) -> dict:
+        nodes = self.nodes
+
+        def visible(node_id: str) -> bool:
+            node = next((n for n in nodes if n["id"] == node_id), None)
+            if node is None:
+                return True
+            if context is None:
+                return True
+            return node.get("context") == context
+
         return {
             "out": [{"to": e["to"], "type": e["type"], "source": e.get("source")}
-                    for e in self.edges if e["from"] == node_id],
+                    for e in self.edges if e["from"] == node_id and visible(e["to"])],
             "in": [{"from": e["from"], "type": e["type"], "source": e.get("source")}
-                   for e in self.edges if e["to"] == node_id],
+                   for e in self.edges if e["to"] == node_id and visible(e["from"])],
         }
 
     def history(self, node_id: str) -> list[dict]:

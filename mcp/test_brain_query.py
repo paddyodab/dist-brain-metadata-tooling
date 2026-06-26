@@ -119,6 +119,89 @@ class SqliteBrainTests(unittest.TestCase):
         self.assertTrue(ids)
 
 
+class ContextScopeTests(unittest.TestCase):
+    """search/overview/neighbors honor an optional context= parameter."""
+
+    def setUp(self) -> None:
+        graph = {
+            "nodes": [
+                {"id": "backend:src/api.py#create_order", "type": "function",
+                 "title": "create_order", "intent": "Create a backend Order.",
+                 "subsystem": "python:api", "context": "backend"},
+                {"id": "backend:src/db.py#save_order", "type": "function",
+                 "title": "save_order", "intent": "Persist the backend Order.",
+                 "subsystem": "python:db", "context": "backend"},
+                {"id": "frontend:src/ui.tsx#OrderView", "type": "function",
+                 "title": "OrderView", "intent": "Render the Order for the frontend.",
+                 "subsystem": "typescript:ui", "context": "frontend"},
+                {"id": "root:src/shared.py#normalize", "type": "function",
+                 "title": "normalize", "intent": "Normalize shared identifiers.",
+                 "subsystem": "python:shared", "context": None},
+            ],
+            "edges": [
+                {"from": "backend:src/api.py#create_order",
+                 "to": "backend:src/db.py#save_order", "type": "calls"},
+                {"from": "frontend:src/ui.tsx#OrderView",
+                 "to": "backend:src/api.py#create_order", "type": "adapts"},
+                {"from": "root:src/shared.py#normalize",
+                 "to": "backend:src/api.py#create_order", "type": "imports"},
+            ],
+        }
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(graph, tmp)
+        tmp.close()
+        self.brain = Brain(tmp.name).load()
+        self._tmp_path = Path(tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp_path.unlink(missing_ok=True)
+
+    def test_overview_has_context_breakdown(self) -> None:
+        ov = self.brain.overview()
+        self.assertIn("contexts", ov)
+        self.assertEqual(ov["contexts"]["backend"], 2)
+        self.assertEqual(ov["contexts"]["frontend"], 1)
+        self.assertEqual(ov["contexts"]["root"], 1)
+
+    def test_overview_scoped_to_context(self) -> None:
+        ov = self.brain.overview(context="backend")
+        self.assertEqual(ov["contexts"], {"backend": 2, "frontend": 1, "root": 1})
+        self.assertEqual(ov["counts"], {"function": 2})
+        self.assertEqual(ov["modules"], ["python:api", "python:db"])
+
+    def test_search_all_contexts_when_empty(self) -> None:
+        hits = self.brain.search("order")
+        self.assertEqual(len(hits), 3)
+
+    def test_search_scoped_to_context(self) -> None:
+        hits = self.brain.search("order", context="backend")
+        self.assertEqual(len(hits), 2)
+        self.assertTrue(all(h["context"] == "backend" for h in hits))
+
+    def test_search_scoped_excludes_root_when_context_set(self) -> None:
+        hits = self.brain.search("normalize", context="backend")
+        self.assertEqual(hits, [])
+
+    def test_neighbors_all_contexts_when_empty(self) -> None:
+        n = self.brain.neighbors("backend:src/api.py#create_order")
+        self.assertEqual(len(n["out"]), 1)
+        self.assertEqual(len(n["in"]), 2)
+
+    def test_neighbors_scoped_to_context(self) -> None:
+        n = self.brain.neighbors("backend:src/api.py#create_order", context="backend")
+        # Only edges whose far-end node is also in backend remain.
+        self.assertEqual([e["to"] for e in n["out"]],
+                         ["backend:src/db.py#save_order"])
+        self.assertEqual(n["in"], [])
+
+    def test_neighbors_shows_cross_context_edges_when_unscoped(self) -> None:
+        n = self.brain.neighbors("backend:src/api.py#create_order")
+        self.assertEqual({e["from"] for e in n["in"]},
+                         {"frontend:src/ui.tsx#OrderView", "root:src/shared.py#normalize"})
+        self.assertEqual([e["to"] for e in n["out"]],
+                         ["backend:src/db.py#save_order"])
+
+
 class DecisionsKindTests(unittest.TestCase):
     """list_decisions surfaces ADRs; list_house_rules surfaces the house rules."""
 
