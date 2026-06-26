@@ -17,6 +17,9 @@ class ContextResolverTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def _write_map(self, body: str) -> None:
+        (self.root / "CONTEXT-MAP.md").write_text(body)
+
     def test_no_context_file_returns_none(self) -> None:
         """A repo with no CONTEXT.md resolves to None (today's behavior)."""
         f = self.root / "src" / "services" / "thing.py"
@@ -92,6 +95,91 @@ class ContextResolverTests(unittest.TestCase):
             self.root.resolve() / "backend" / "CONTEXT.md",
         )
         self.assertEqual(glossary_path(self.root, None), self.root.resolve() / "CONTEXT.md")
+
+    def test_context_map_overrides_walk_up(self) -> None:
+        """CONTEXT-MAP.md is authoritative even without a nearby CONTEXT.md."""
+        self._write_map(
+            """# Context Map
+
+| Context  | Location  | Kind      | Description |
+|----------|-----------|-----------|-------------|
+| backend  | backend/  | service   | API server  |
+| frontend | frontend/ | component | SPA         |
+"""
+        )
+        f = self.root / "backend" / "src" / "thing.py"
+        f.parent.mkdir(parents=True)
+        f.write_text("def foo(): pass\n")
+        self.assertEqual(resolve_context(f, self.root), "backend")
+
+    def test_context_map_falls_back_when_file_outside_map(self) -> None:
+        """Files not in the map still use walk-up fallback."""
+        self._write_map(
+            """# Context Map
+
+| Context  | Location  | Kind      | Description |
+|----------|-----------|-----------|-------------|
+| backend  | backend/  | service   | API server  |
+"""
+        )
+        shared = self.root / "shared" / "utils.py"
+        shared.parent.mkdir(parents=True)
+        (shared.parent / "CONTEXT.md").write_text("# Shared\n")
+        shared.write_text("def util(): pass\n")
+        self.assertEqual(resolve_context(shared, self.root), "shared")
+
+    def test_context_map_longest_prefix_wins(self) -> None:
+        """A more specific mapped location wins over a shorter one."""
+        self._write_map(
+            """# Context Map
+
+| Context   | Location          | Kind     | Description |
+|-----------|-------------------|----------|-------------|
+| backend   | backend/          | service  | API         |
+| billing   | backend/billing/  | service  | Billing     |
+"""
+        )
+        f = self.root / "backend" / "billing" / "invoice.py"
+        f.parent.mkdir(parents=True)
+        f.write_text("def inv(): pass\n")
+        self.assertEqual(resolve_context(f, self.root), "billing")
+
+    def test_context_map_root_location(self) -> None:
+        """A map row with Location '.' or 'root/' resolves root files to 'root'."""
+        self._write_map(
+            """# Context Map
+
+| Context  | Location | Kind     | Description |
+|----------|----------|----------|-------------|
+| root     | .        | root     | Shared      |
+| backend  | backend/ | service  | API         |
+"""
+        )
+        f = self.root / "tooling.py"
+        f.write_text("def tool(): pass\n")
+        self.assertEqual(resolve_context(f, self.root), "root")
+
+    def test_context_map_ignores_non_context_table(self) -> None:
+        """A Markdown table without Context/Location columns is ignored."""
+        self._write_map(
+            """# Some other table
+
+| Name | Value |
+|------|-------|
+| foo  | bar   |
+
+| Context  | Location  | Kind      | Description |
+|----------|-----------|-----------|-------------|
+| backend  | backend/  | service   | API server  |
+"""
+        )
+        backend = self.root / "backend"
+        backend.mkdir()
+        (backend / "CONTEXT.md").write_text("# Backend\n")
+        f = backend / "thing.py"
+        f.write_text("def foo(): pass\n")
+        # First table has no Context/Location, so it is ignored; second table wins.
+        self.assertEqual(resolve_context(f, self.root), "backend")
 
 
 if __name__ == "__main__":
