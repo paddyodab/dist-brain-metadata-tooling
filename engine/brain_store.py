@@ -19,7 +19,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_REVISION = "main"
 
 
@@ -91,6 +91,7 @@ class BrainStore:
               provenance_status TEXT NOT NULL DEFAULT 'verified',
               first_seen_sha TEXT,
               last_touched_sha TEXT,
+              context TEXT,
               PRIMARY KEY (revision_ref, id),
               FOREIGN KEY (revision_ref) REFERENCES revisions(ref) ON DELETE CASCADE
             );
@@ -120,6 +121,14 @@ class BrainStore:
             CREATE INDEX IF NOT EXISTS idx_edges_to
               ON edges(revision_ref, to_id);
             """
+        )
+        # Migration: add context column if it doesn't exist (v1 -> v2)
+        cols = self.conn.execute("PRAGMA table_info(nodes)").fetchall()
+        if not any(c["name"] == "context" for c in cols):
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN context TEXT")
+        # Index on context (safe for both fresh v2 and migrated v1 — column exists now)
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nodes_context ON nodes(revision_ref, context)"
         )
         # FTS5 — separate execute; may fail on minimal sqlite builds
         try:
@@ -170,6 +179,7 @@ class BrainStore:
             status,
             first,
             last,
+            node.get("context"),
         )
 
     def _upsert_fts(self, revision: str, entity_id: str, title: str, intent: str) -> None:
@@ -276,14 +286,15 @@ class BrainStore:
                     "INSERT INTO nodes("
                     "revision_ref, id, type, title, intent, subsystem, facts_json, "
                     "provenance_json, source_path, source_sha, provenance_status, "
-                    "first_seen_sha, last_touched_sha"
-                    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "first_seen_sha, last_touched_sha, context"
+                    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(revision_ref, id) DO UPDATE SET "
                     "type=excluded.type, title=excluded.title, intent=excluded.intent, "
                     "subsystem=excluded.subsystem, facts_json=excluded.facts_json, "
                     "provenance_json=excluded.provenance_json, source_path=excluded.source_path, "
                     "source_sha=excluded.source_sha, provenance_status=excluded.provenance_status, "
-                    "first_seen_sha=excluded.first_seen_sha, last_touched_sha=excluded.last_touched_sha",
+                    "first_seen_sha=excluded.first_seen_sha, last_touched_sha=excluded.last_touched_sha, "
+                    "context=excluded.context",
                     self._node_row(revision, node, sha, prev),
                 )
                 self._upsert_fts(revision, node["id"], node.get("title") or "", node.get("intent") or "")
@@ -344,7 +355,7 @@ class BrainStore:
                 "INSERT INTO nodes SELECT "
                 "? AS revision_ref, id, type, title, intent, subsystem, facts_json, "
                 "provenance_json, source_path, source_sha, provenance_status, "
-                "first_seen_sha, last_touched_sha FROM nodes WHERE revision_ref=?",
+                "first_seen_sha, last_touched_sha, context FROM nodes WHERE revision_ref=?",
                 (tag_ref, from_ref),
             )
             self.conn.execute(
@@ -397,6 +408,7 @@ class BrainStore:
             "provenance": prov,
             "first_seen_sha": row["first_seen_sha"],
             "last_touched_sha": row["last_touched_sha"],
+            "context": row["context"],
         }
 
     def history(self, entity_id: str, revision: str = DEFAULT_REVISION) -> list[dict]:
@@ -449,11 +461,19 @@ class BrainStore:
             "edges": edges,
         }
 
-    def _search_scan(self, revision: str, tokens: list[str], limit: int) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT id, type, title, intent FROM nodes WHERE revision_ref=?",
-            (revision,),
-        ).fetchall()
+    def _search_scan(self, revision: str, tokens: list[str], limit: int,
+                     context: str | None = None) -> list[dict]:
+        if context is not None:
+            rows = self.conn.execute(
+                "SELECT id, type, title, intent FROM nodes "
+                "WHERE revision_ref=? AND (context = ? OR context IS NULL)",
+                (revision, context),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT id, type, title, intent FROM nodes WHERE revision_ref=?",
+                (revision,),
+            ).fetchall()
         scored: list[tuple[int, dict]] = []
         for r in rows:
             hay = " ".join(str(x) for x in (r["id"], r["title"], r["intent"])).lower()
@@ -472,7 +492,8 @@ class BrainStore:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [h for _, h in scored[:limit]]
 
-    def search(self, query: str, revision: str = DEFAULT_REVISION, limit: int = 12) -> list[dict]:
+    def search(self, query: str, revision: str = DEFAULT_REVISION, limit: int = 12,
+               context: str | None = None) -> list[dict]:
         tokens = [t for t in query.lower().split() if t]
         if not tokens:
             return []
@@ -480,12 +501,21 @@ class BrainStore:
         fts_hits: list[dict] = []
         try:
             match = " OR ".join(_fts_quote(t) for t in tokens)
-            rows = self.conn.execute(
-                "SELECT n.id, n.type, n.title, n.intent FROM nodes_fts f "
-                "JOIN nodes n ON n.id=f.entity_id AND n.revision_ref=f.revision_ref "
-                "WHERE f.revision_ref=? AND nodes_fts MATCH ? LIMIT ?",
-                (revision, match, max(limit * 8, 96)),
-            ).fetchall()
+            if context is not None:
+                rows = self.conn.execute(
+                    "SELECT n.id, n.type, n.title, n.intent FROM nodes_fts f "
+                    "JOIN nodes n ON n.id=f.entity_id AND n.revision_ref=f.revision_ref "
+                    "WHERE f.revision_ref=? AND (n.context = ? OR n.context IS NULL) "
+                    "AND nodes_fts MATCH ? LIMIT ?",
+                    (revision, context, match, max(limit * 8, 96)),
+                ).fetchall()
+            else:
+                rows = self.conn.execute(
+                    "SELECT n.id, n.type, n.title, n.intent FROM nodes_fts f "
+                    "JOIN nodes n ON n.id=f.entity_id AND n.revision_ref=f.revision_ref "
+                    "WHERE f.revision_ref=? AND nodes_fts MATCH ? LIMIT ?",
+                    (revision, match, max(limit * 8, 96)),
+                ).fetchall()
             for r in rows:
                 fts_hits.append({
                     "id": r["id"],
@@ -494,10 +524,10 @@ class BrainStore:
                     "intent": r["intent"],
                 })
         except sqlite3.OperationalError:
-            return self._search_scan(revision, tokens, limit)
+            return self._search_scan(revision, tokens, limit, context)
 
         if not fts_hits:
-            return self._search_scan(revision, tokens, limit)
+            return self._search_scan(revision, tokens, limit, context)
 
         scored: list[tuple[int, dict]] = []
         for h in fts_hits:

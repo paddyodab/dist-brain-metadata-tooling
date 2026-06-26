@@ -17,10 +17,9 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from brain_store import BrainStore, DEFAULT_REVISION, export_graph_json
+from brain_store import BrainStore, DEFAULT_REVISION, export_graph_json, SCHEMA_VERSION
 
 ENGINE = Path(__file__).resolve().parent
-SCHEMA_VERSION = 1
 
 
 def git_sha(root: Path) -> str:
