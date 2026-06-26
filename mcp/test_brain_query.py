@@ -120,15 +120,15 @@ class SqliteBrainTests(unittest.TestCase):
 
 
 class DecisionsKindTests(unittest.TestCase):
-    """list_decisions surfaces kind/enforcement and can filter to the house rules."""
+    """list_decisions surfaces ADRs; list_house_rules surfaces the house rules."""
 
     def setUp(self) -> None:
         graph = {
             "nodes": [
                 {"id": "decision:0001-record", "type": "decision", "title": "A record",
                  "intent": "retrospective", "facts": {"status": "Accepted", "kind": "record"}},
-                {"id": "decision:0007-pact", "type": "decision", "title": "Use Pact",
-                 "intent": "premise", "facts": {"status": "accepted", "kind": "constraint",
+                {"id": "house-rule:pact", "type": "house-rule", "title": "Use Pact",
+                 "intent": "premise", "facts": {"status": "accepted",
                  "enforcement": "deterministic", "applies_to": "boundaries"}},
             ],
             "edges": [],
@@ -142,21 +142,23 @@ class DecisionsKindTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp_path.unlink(missing_ok=True)
 
-    def test_all_decisions_carry_kind(self) -> None:
-        kinds = {d["id"]: d["kind"] for d in self.brain.decisions()}
-        self.assertEqual(kinds["decision:0001-record"], "record")
-        self.assertEqual(kinds["decision:0007-pact"], "constraint")
+    def test_decisions_are_records(self) -> None:
+        decisions = self.brain.decisions()
+        self.assertEqual([d["id"] for d in decisions], ["decision:0001-record"])
+        self.assertNotIn("enforcement", decisions[0])
 
-    def test_filter_to_constraints(self) -> None:
-        rules = self.brain.decisions(kind="constraint")
-        self.assertEqual([d["id"] for d in rules], ["decision:0007-pact"])
+    def test_house_rules_are_separate(self) -> None:
+        rules = self.brain.house_rules()
+        self.assertEqual([d["id"] for d in rules], ["house-rule:pact"])
         self.assertEqual(rules[0]["enforcement"], "deterministic")
         self.assertEqual(rules[0]["applies_to"], "boundaries")
 
-    def test_overview_reports_kind(self) -> None:
-        kinds = {d["id"]: d["kind"] for d in self.brain.overview()["decisions"]}
-        self.assertEqual(kinds["decision:0001-record"], "record")
-        self.assertEqual(kinds["decision:0007-pact"], "constraint")
+    def test_overview_reports_both(self) -> None:
+        ov = self.brain.overview()
+        self.assertEqual(len(ov["decisions"]), 1)
+        self.assertEqual(len(ov["house_rules"]), 1)
+        self.assertEqual(ov["decisions"][0]["id"], "decision:0001-record")
+        self.assertEqual(ov["house_rules"][0]["id"], "house-rule:pact")
 
 
 class HistoryWhyTests(unittest.TestCase):

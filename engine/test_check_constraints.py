@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Tests for constraint ADRs: frontmatter parsing + the rung-3 gate runner.
+"""Tests for house rules: yml parsing + the rung-3 gate runner.
 Run: python3 engine/test_check_constraints.py
 
 Discriminating specs:
   * A bare record ADR (no frontmatter) keeps its historic node shape (id/title/intent/
-    status), only gaining kind='record'. Frontmatter junk never leaks into title/intent.
-  * Only accepted constraints are enforced. A deterministic gate that exits nonzero —
-    or is missing, or absent on a deterministic ADR — fails the build (fail-closed).
+    status, kind='record').
+  * house-rules/*.yml are machine-readable constraints: only accepted rules are enforced.
+  * A deterministic gate that exits nonzero — or is missing, or absent on a deterministic
+    rule — fails the build (fail-closed).
   * advisory/semantic are reported, never a failure.
 """
 from __future__ import annotations
@@ -17,7 +18,7 @@ import unittest
 from pathlib import Path
 
 import check_constraints
-from extract import adr_nodes, split_frontmatter
+from extract import adr_nodes, house_rules_nodes, _parse_house_rule
 
 
 def _write(root: Path, rel: str, text: str) -> None:
@@ -40,7 +41,7 @@ RECORD_ADR = """\
 - Read-only callers can resolve freely.
 """
 
-# A deterministic constraint whose gate just echoes its own exit code from a file.
+# A deterministic rule whose gate just echoes its own exit code from a file.
 GATE_TPL = """\
 import os, sys
 from pathlib import Path
@@ -49,32 +50,43 @@ sys.exit(int((root / "gate_rc.txt").read_text().strip()))
 """
 
 
-def _constraint(title, *, status="accepted", enforcement="advisory", gate=None,
-                applies_to=None) -> str:
-    fm = [f"title: {title}", f"status: {status}", "kind: constraint",
-          f"enforcement: {enforcement}"]
+def _rule(title, *, status="accepted", enforcement="advisory", gate=None,
+          applies_to=None, rule_id=None) -> str:
+    lines = [f"rule: {title}", f"status: {status}", f"enforcement: {enforcement}"]
+    if rule_id:
+        lines.insert(0, f"id: {rule_id}")
     if gate:
-        fm.append(f"gate: {gate}")
+        lines.append(f"gate: {gate}")
     if applies_to:
-        fm.append(f"applies_to: {applies_to}")
-    front = "\n".join(fm)
-    return f"---\n{front}\n---\n# {title}\n\n## Decision\n\nThe rule body.\n"
+        lines.append(f"applies_to: {applies_to}")
+    lines.append("rationale: |")
+    lines.append("  The rule body.")
+    return "\n".join(lines) + "\n"
 
 
-class FrontmatterTests(unittest.TestCase):
-    def test_no_fence_passes_through(self):
-        self.assertEqual(split_frontmatter("# Title\n\nbody"), ({}, "# Title\n\nbody"))
+class HouseRuleParserTests(unittest.TestCase):
+    def test_empty_returns_none(self):
+        self.assertIsNone(_parse_house_rule(""))
 
-    def test_unterminated_fence_is_not_frontmatter(self):
-        fm, body = split_frontmatter("---\nkey: v\n# no closing fence")
-        self.assertEqual(fm, {})
-        self.assertTrue(body.startswith("---"))
+    def test_block_scalar_rationale(self):
+        parsed = _parse_house_rule("""\
+            id: 1
+            rule: Use Pact
+            rationale: |
+              Every boundary must have a contract.
+            status: accepted
+            enforcement: deterministic
+            gate: checks/g.py
+            applies_to: services/
+            """)
+        self.assertEqual(parsed["rule"], "Use Pact")
+        self.assertEqual(parsed["rationale"], "Every boundary must have a contract.")
+        self.assertEqual(parsed["gate"], "checks/g.py")
+        self.assertEqual(parsed["applies_to"], "services/")
 
-    def test_parses_known_keys_and_strips_quotes(self):
-        fm, body = split_frontmatter('---\nkind: constraint\napplies_to: "a, b"\n---\nbody')
-        self.assertEqual(fm["kind"], "constraint")
-        self.assertEqual(fm["applies_to"], "a, b")
-        self.assertEqual(body, "body")
+    def test_inline_rationale(self):
+        parsed = _parse_house_rule("rule: Mono\nrationale: one repo\nstatus: accepted")
+        self.assertEqual(parsed["rationale"], "one repo")
 
 
 class RecordAdrRegressionTests(unittest.TestCase):
@@ -87,32 +99,37 @@ class RecordAdrRegressionTests(unittest.TestCase):
             self.assertEqual(node["title"], "1. Resolution does not record clicks")
             self.assertEqual(node["intent"], "`resolve()` is a pure lookup and never mutates state.")
             self.assertEqual(node["facts"]["status"], "Accepted · 2026-06-18")
-            # New, additive: kind defaults to record; no constraint fields leak in.
             self.assertEqual(node["facts"]["kind"], "record")
             self.assertNotIn("enforcement", node["facts"])
 
-    def test_constraint_frontmatter_lands_in_facts(self):
+    def test_record_adr_with_frontmatter_ignored(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            _write(root, "decisions/0007-pact.md",
-                   _constraint("Use Pact", enforcement="deterministic",
-                               gate="checks/g.py", applies_to="service boundaries"))
+            # old constraint frontmatter now lives in house-rules, not decisions
+            _write(root, "decisions/0007-pact.md", """\
+                ---
+                id: 0007
+                title: Use Pact
+                status: accepted
+                ---
+                # Use Pact
+
+                ## Decision
+
+                The record body.
+                """)
             (node,) = adr_nodes(root)
-            f = node["facts"]
-            self.assertEqual(f["kind"], "constraint")
-            self.assertEqual(f["enforcement"], "deterministic")
-            self.assertEqual(f["gate"], "checks/g.py")
-            self.assertEqual(f["applies_to"], "service boundaries")
-            # Title/intent come from the body, not the frontmatter fence.
+            self.assertEqual(node["facts"]["kind"], "record")
+            self.assertNotIn("enforcement", node["facts"])
             self.assertEqual(node["title"], "Use Pact")
-            self.assertEqual(node["intent"], "The rule body.")
+            self.assertEqual(node["intent"], "The record body.")
 
 
 class GateRunnerTests(unittest.TestCase):
     def _root_with_gate(self, d, rc: int, **kw) -> Path:
         root = Path(d)
-        _write(root, "decisions/0007-pact.md",
-               _constraint("Use Pact", enforcement="deterministic", gate="checks/g.py", **kw))
+        _write(root, "house-rules/pact.yml",
+               _rule("Use Pact", enforcement="deterministic", gate="checks/g.py", **kw))
         _write(root, "checks/g.py", GATE_TPL)
         (root / "gate_rc.txt").write_text(str(rc))
         return root
@@ -127,13 +144,13 @@ class GateRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             res = check_constraints.check_constraints(self._root_with_gate(d, 1))
             self.assertEqual(len(res["failures"]), 1)
-            self.assertEqual(res["failures"][0][0], "decision:0007-pact")
+            self.assertEqual(res["failures"][0][0], "house-rule:pact")
 
     def test_missing_gate_script_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            _write(root, "decisions/0007-pact.md",
-                   _constraint("Use Pact", enforcement="deterministic", gate="checks/nope.py"))
+            _write(root, "house-rules/pact.yml",
+                   _rule("Use Pact", enforcement="deterministic", gate="checks/nope.py"))
             res = check_constraints.check_constraints(root)
             self.assertEqual(len(res["failures"]), 1)
             self.assertIn("not found", res["failures"][0][2])
@@ -141,16 +158,15 @@ class GateRunnerTests(unittest.TestCase):
     def test_deterministic_without_gate_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            _write(root, "decisions/0007.md", _constraint("Use Pact", enforcement="deterministic"))
+            _write(root, "house-rules/pact.yml", _rule("Use Pact", enforcement="deterministic"))
             res = check_constraints.check_constraints(root)
             self.assertEqual(len(res["failures"]), 1)
             self.assertIn("no gate", res["failures"][0][2])
 
-    def test_proposed_constraint_is_inert(self):
+    def test_proposed_rule_is_inert(self):
         with tempfile.TemporaryDirectory() as d:
             root = self._root_with_gate(d, 1)  # gate would fail if run
-            # flip status to proposed → not enforced at all
-            p = root / "decisions/0007-pact.md"
+            p = root / "house-rules/pact.yml"
             p.write_text(p.read_text().replace("status: accepted", "status: proposed"))
             res = check_constraints.check_constraints(root)
             self.assertEqual(res, {"failures": [], "advisories": [], "checked": 0, "total": 0})
@@ -158,15 +174,15 @@ class GateRunnerTests(unittest.TestCase):
     def test_advisory_and_semantic_are_reported_not_failed(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            _write(root, "decisions/0008-mono.md", _constraint("Monorepo", enforcement="advisory"))
-            _write(root, "decisions/0009-comp.md", _constraint("Composition", enforcement="semantic"))
+            _write(root, "house-rules/mono.yml", _rule("Monorepo", enforcement="advisory"))
+            _write(root, "house-rules/comp.yml", _rule("Composition", enforcement="semantic"))
             res = check_constraints.check_constraints(root)
             self.assertEqual(res["failures"], [])
             self.assertEqual(res["checked"], 0)
             kinds = sorted(enf for _, _, enf in res["advisories"])
             self.assertEqual(kinds, ["advisory", "semantic"])
 
-    def test_record_adr_is_not_a_constraint(self):
+    def test_record_adr_is_not_a_rule(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             _write(root, "decisions/0001-resolve.md", RECORD_ADR)

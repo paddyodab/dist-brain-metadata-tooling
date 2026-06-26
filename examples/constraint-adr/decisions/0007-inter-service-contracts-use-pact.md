@@ -1,12 +1,3 @@
----
-id: 0007
-title: All inter-service contracts use Pact
-status: accepted
-kind: constraint
-enforcement: deterministic
-gate: checks/adr_0007_pact.py
-applies_to: any service under services/ (every cross-service boundary)
----
 # 7. All inter-service contracts use Pact
 
 **Status:** Accepted · 2026-06-25
@@ -25,9 +16,9 @@ service with no `pacts/` is a violation, not a "todo".
 
 ## Consequences
 
-- A new boundary cannot ship without a contract — the constraint gate
+- A new boundary cannot ship without a contract — the house-rule gate
   (`checks/adr_0007_pact.py`) fails CI when a service lacks `pacts/`.
 - This is a forward-looking premise: `/feature` and grilling must treat "add a service"
   as implying "add its pacts/", and must not entertain contract-free boundaries.
-- Superseding this ADR (e.g. moving to a schema registry) requires flipping `status` to
-  `superseded` and adding the replacement — you cannot quietly drop the gate.
+- Superseding this rule requires flipping `status` to `superseded` in
+  `house-rules/pact.yml` and adding a replacement — you cannot quietly drop the gate.

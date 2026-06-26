@@ -1,0 +1,10 @@
+id: 0007
+rule: All inter-service contracts use Pact
+rationale: |
+  As the system splits into services, each cross-service call is a contract. Without a
+  machine-checked contract, a producer can change a payload and break a consumer with no
+  signal until runtime. We want the boundary, not just the code, to be verifiable.
+enforcement: deterministic
+gate: checks/adr_0007_pact.py
+applies_to: any service under services/ (every cross-service boundary)
+status: accepted

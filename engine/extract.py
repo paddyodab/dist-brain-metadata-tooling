@@ -142,37 +142,12 @@ def adr_summary(text: str) -> str:
     return ""
 
 
-def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
-    """Split an optional leading ``---`` YAML-ish fence from a markdown body.
-
-    Returns ``(frontmatter, body)``. Stdlib-only: parses flat ``key: value`` pairs
-    (the subset ADRs use — id/title/status/kind/enforcement/gate/applies_to); nested
-    or list values are ignored, never fatal. No fence → ``({}, text)`` so record ADRs
-    with no frontmatter pass through untouched.
-    """
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}, text
-    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-    if end is None:
-        return {}, text  # unterminated fence — treat the whole file as body
-    fm: dict[str, str] = {}
-    for line in lines[1:end]:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        key, sep, val = line.partition(":")
-        if sep:
-            fm[key.strip().lower()] = val.strip().strip('"').strip("'")
-    return fm, "\n".join(lines[end + 1:])
-
-
 def adr_nodes(root: Path) -> list[dict]:
     """Ingest decisions/*.md (ADRs) as decision nodes — the cross-cutting 'why'.
 
-    Optional frontmatter (``kind: record|constraint``, ``status``, ``enforcement``,
-    ``gate``, ``applies_to``) is parsed into ``facts`` so the materializer and
-    ``check_constraints`` can act on constraint ADRs (§3 fidelity ladder). A bare
-    record ADR (no fence) keeps its historic shape; ``kind`` defaults to ``record``.
+    Pure Nygard: no frontmatter parsing, no constraint machinery. The title comes from
+    the first ``# `` line; status comes from ``**Status:**``. Records only — all
+    forward-looking, enforceable rules live in ``house-rules/*.yml``.
     """
     d = root / "decisions"
     out: list[dict] = []
@@ -180,30 +155,111 @@ def adr_nodes(root: Path) -> list[dict]:
         return out
     for f in sorted(d.glob("*.md")):
         raw = f.read_text()
-        fm, body = split_frontmatter(raw)
-        title = fm.get("title") or next(
-            (l[2:].strip() for l in body.splitlines() if l.startswith("# ")), f.stem)
-        status = fm.get("status") or next(
+        lines = raw.splitlines()
+        title = next((l[2:].strip() for l in lines if l.startswith("# ")), f.stem)
+        status = next(
             (l.split("**Status:**", 1)[1].strip()
-             for l in body.splitlines() if "**Status:**" in l), None)
-        kind = (fm.get("kind") or "record").lower()
-        facts: dict = {"status": status, "kind": kind}
-        if kind == "constraint":
-            facts["enforcement"] = (fm.get("enforcement") or "advisory").lower()
-            if fm.get("gate"):
-                facts["gate"] = fm["gate"]
-            if fm.get("applies_to"):
-                facts["applies_to"] = fm["applies_to"]
-        if fm.get("id"):
-            facts["adr_id"] = fm["id"]
+             for l in lines if "**Status:**" in l), None)
         out.append({
             "id": f"decision:{f.stem}", "type": "decision", "title": title,
-            "intent": adr_summary(body),
-            "facts": facts,
+            "intent": adr_summary(raw),
+            "facts": {"status": status, "kind": "record"},
             "subsystem": "decisions",
             "provenance": {"source_path": str(f.relative_to(root)),
                            "source_sha": hashlib.sha1(raw.encode()).hexdigest()[:12],
                            "status": "verified", "extracted_by": "adr@1"},
+        })
+    return out
+
+
+def _parse_yml_value(val: str) -> str:
+    """Strip surrounding quotes and trailing whitespace from a flat YAML scalar."""
+    return val.strip().strip('"').strip("'")
+
+
+def _parse_house_rule(raw: str) -> dict | None:
+    """Stdlib-only parser for flat house-rules/*.yml.
+
+    Recognized fields: id, rule, rationale (string or | block), enforcement, gate,
+    applies_to, status. Block scalars (|) collect every subsequent indented line.
+    Returns None if the file is empty or has no rule.
+    """
+    if not raw.strip():
+        return None
+    lines = raw.splitlines()
+    fields: dict[str, str | None] = {
+        "id": None, "rule": None, "rationale": None, "enforcement": "advisory",
+        "gate": None, "applies_to": None, "status": None,
+    }
+    current: str | None = None
+    buffer: list[str] = []
+    block_key_indent: int | None = None
+
+    def flush() -> None:
+        if current is not None and current in fields:
+            fields[current] = "\n".join(buffer).strip()
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        # Block-scalar continuation: any line more indented than the key that opened
+        # the block belongs to that field, even if it looks like a top-level key.
+        if current is not None and block_key_indent is not None and line_indent > block_key_indent:
+            content_indent = block_key_indent + 2
+            buffer.append(line[content_indent:] if len(line) >= content_indent else line.lstrip())
+            continue
+        flush()
+        key, sep, val = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip().lower()
+        val = val.strip()
+        current = key
+        if val == "|":
+            buffer = []
+            block_key_indent = line_indent
+        else:
+            buffer = [_parse_yml_value(val)]
+            block_key_indent = None
+    flush()
+    return fields if fields["rule"] else None
+
+
+def house_rules_nodes(root: Path) -> list[dict]:
+    """Ingest house-rules/*.yml as 'house-rule' nodes — the enforceable premises.
+
+    Machine-readable, forward-looking constraints. Each rule has an enforcement level
+    (advisory, semantic, deterministic) and an optional gate script for deterministic
+    enforcement. Status controls whether the rule is active (only 'accepted' is enforced).
+    """
+    d = root / "house-rules"
+    out: list[dict] = []
+    if not d.exists():
+        return out
+    for f in sorted(d.glob("*.yml")):
+        raw = f.read_text()
+        parsed = _parse_house_rule(raw)
+        if parsed is None:
+            continue
+        facts: dict = {
+            "status": parsed["status"],
+            "enforcement": (parsed["enforcement"] or "advisory").lower(),
+        }
+        for k in ("gate", "applies_to"):
+            if parsed.get(k):
+                facts[k] = parsed[k]
+        if parsed.get("id"):
+            facts["rule_id"] = parsed["id"]
+        out.append({
+            "id": f"house-rule:{f.stem}", "type": "house-rule", "title": parsed["rule"],
+            "intent": parsed["rationale"],
+            "facts": facts,
+            "subsystem": "house-rules",
+            "provenance": {"source_path": str(f.relative_to(root)),
+                           "source_sha": hashlib.sha1(raw.encode()).hexdigest()[:12],
+                           "status": "verified", "extracted_by": "house-rules@1"},
         })
     return out
 
@@ -271,7 +327,7 @@ def git_changed_paths(root: Path, since: str | None,
 
 
 def extract_full(root: Path, src_root: Path, flags_path: Path) -> dict:
-    nodes = list(flag_nodes(flags_path)) + adr_nodes(root)
+    nodes = list(flag_nodes(flags_path)) + adr_nodes(root) + house_rules_nodes(root)
     edges: list[dict] = []
     for f in sorted(src_root.rglob("*.py")):
         n, e = extract_file(f, root)
@@ -293,6 +349,8 @@ def extract_scoped(root: Path, src_root: Path, flags_path: Path,
         nodes += flag_nodes(flags_path)
     if any(p.startswith("decisions/") for p in touched):
         nodes += adr_nodes(root)
+    if any(p.startswith("house-rules/") for p in touched):
+        nodes += house_rules_nodes(root)
 
     for p in sorted(changed):
         f = (root / p)

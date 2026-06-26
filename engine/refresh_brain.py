@@ -44,19 +44,24 @@ def _source_sha(node: dict) -> str | None:
 def scoped_delta(prev_nodes: list[dict], new_nodes: list[dict],
                  scope: dict, flags_name: str) -> dict:
     """diff_nodes, but removals limited to what this run re-extracted, so unchanged
-    files are never touched. Small categories (flags/decisions) count as in-scope only
-    when their file actually changed — otherwise their absence from ``new`` would be
-    misread as a removal."""
+    files are never touched. Small categories (flags/decisions/house-rules) count as
+    in-scope only when their file actually changed — otherwise their absence from ``new``
+    would be misread as a removal."""
     touched = set(scope["paths"]) | set(scope["deleted"])
     flags_in_scope = any(Path(p).name == flags_name for p in touched)
     decisions_in_scope = any(p.startswith("decisions/") for p in touched)
+    house_rules_in_scope = any(p.startswith("house-rules/") for p in touched)
 
     def in_scope(node: dict) -> bool:
         sp = (node.get("provenance") or {}).get("source_path")
         if sp in touched:
             return True
         sub = node.get("subsystem")
-        return (sub == "flags" and flags_in_scope) or (sub == "decisions" and decisions_in_scope)
+        return (
+            (sub == "flags" and flags_in_scope)
+            or (sub == "decisions" and decisions_in_scope)
+            or (sub == "house-rules" and house_rules_in_scope)
+        )
 
     prev = {n["id"]: n for n in prev_nodes if in_scope(n)}
     new = {n["id"]: n for n in new_nodes}

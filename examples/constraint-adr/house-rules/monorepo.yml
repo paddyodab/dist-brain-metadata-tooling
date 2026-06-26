@@ -1,0 +1,8 @@
+id: 0008
+rule: Single monorepo — no second package root
+rationale: |
+  We want one place to change, one CI, one brain. A second repo fragments ownership and
+  breaks the cross-cutting graph.
+enforcement: advisory
+applies_to: repository topology
+status: accepted

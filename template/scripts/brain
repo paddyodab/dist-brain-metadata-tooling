@@ -5,7 +5,7 @@
 #   refresh [--since ref]      diff-scoped brain.sqlite update, no render (per-turn/goal)
 #   infer <path> [--out file]   draft @intent queue for legacy symbols
 #   gate [--since ref]          Tier-1 metadata check (boy-scout/diff-scoped with --since)
-#   constraints                 enforce accepted constraint ADRs (rung-3 gate runner)
+#   constraints                 enforce accepted house rules (rung-3 gate runner)
 #   lint                        advisory no-op lint: flag @intent that restates the name (sediment)
 #   gherkin [--check]           generate (or verify) BDD features
 #   stubs [--check]             generate (or verify) contract test stubs
@@ -77,8 +77,8 @@ case "$cmd" in
     py_src check_metadata "$@"
     ;;
   constraints|adr-gate)
-    # rung-3 constraint gate: enforce accepted constraint ADRs (deterministic gates run,
-    # advisory/semantic reported). Reads decisions/ — no --src needed.
+    # rung-3 constraint gate: enforce accepted house rules (deterministic gates run,
+    # advisory/semantic reported). Reads house-rules/ — no --src needed.
     py check_constraints "$@"
     ;;
   lint)

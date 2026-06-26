@@ -176,8 +176,8 @@ more than they need autonomy.
 — inference → ratify → `scripts/brain` local loop (validated walkthrough; incremental
 adoption, stub skips, when *not* to run full `verify`).
 
-**House rules that gate:** [`docs/constraint-adrs.md`](docs/constraint-adrs.md) — record vs
-constraint ADRs, the fidelity ladder, frontmatter, and the `check_constraints` rung-3 gate
+**House rules that gate:** [`docs/house-rules.md`](docs/house-rules.md) — record ADRs vs
+house rules, the fidelity ladder, `house-rules/*.yml`, and the `check_constraints` rung-3 gate
 (`scripts/brain constraints`).
 
 `engine/generate_verification.py` turns `@raises` / `@returns` contracts into

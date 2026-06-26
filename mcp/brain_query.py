@@ -240,10 +240,13 @@ class Brain:
         modules = sorted({n["subsystem"] for n in self.nodes if n["type"] in ("function", "method")})
         flags = sorted(n["title"] for n in self.nodes if n["type"] == "flag")
         decisions = [{"id": n["id"], "title": n["title"], "status": n["facts"].get("status"),
-                      "kind": n["facts"].get("kind", "record"),
-                      "enforcement": n["facts"].get("enforcement"),
                       "source": n.get("source")}
                      for n in self.nodes if n["type"] == "decision"]
+        house_rules = [{"id": n["id"], "title": n["title"], "status": n["facts"].get("status"),
+                        "enforcement": n["facts"].get("enforcement"),
+                        "applies_to": n["facts"].get("applies_to"),
+                        "source": n.get("source")}
+                       for n in self.nodes if n["type"] == "house-rule"]
         return {
             "joined": self._graph.get("joined", False),
             "storage": self._graph.get("storage"),
@@ -255,6 +258,7 @@ class Brain:
             "modules": modules,
             "flags": flags,
             "decisions": decisions,
+            "house_rules": house_rules,
         }
 
     def search(self, query: str, limit: int = 12, source: str | None = None) -> list[dict]:
@@ -332,19 +336,26 @@ class Brain:
             "intent_changes": len(self.history(node_id)),
         }
 
-    def decisions(self, source: str | None = None, kind: str | None = None) -> list[dict]:
-        """List decision/ADR nodes. ``kind`` filters to ``record`` or ``constraint``
-        (constraint ADRs are the house rules — the rung-2 premises /feature consults)."""
+    def decisions(self, source: str | None = None) -> list[dict]:
+        """List decision/ADR nodes (retrospective records)."""
         out = []
         for n in self._filter_nodes(self.nodes, source):
             if n["type"] != "decision":
                 continue
-            n_kind = n["facts"].get("kind", "record")
-            if kind and n_kind != kind:
+            out.append({"id": n["id"], "title": n["title"],
+                        "status": n["facts"].get("status"),
+                        "summary": n.get("intent"), "source": n.get("source")})
+        return out
+
+    def house_rules(self, source: str | None = None) -> list[dict]:
+        """List house-rule nodes — forward-looking premises from house-rules/*.yml."""
+        out = []
+        for n in self._filter_nodes(self.nodes, source):
+            if n["type"] != "house-rule":
                 continue
             out.append({"id": n["id"], "title": n["title"],
                         "status": n["facts"].get("status"),
-                        "kind": n_kind, "enforcement": n["facts"].get("enforcement"),
+                        "enforcement": n["facts"].get("enforcement"),
                         "applies_to": n["facts"].get("applies_to"),
                         "summary": n.get("intent"), "source": n.get("source")})
         return out

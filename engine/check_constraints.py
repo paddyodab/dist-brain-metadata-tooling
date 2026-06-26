@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""Constraint-ADR gate (rung 3) — deterministic, stdlib-only.
+"""House-rules gate (rung 3) — deterministic, stdlib-only.
 
-Loads accepted constraint ADRs from ``decisions/`` (frontmatter ``kind: constraint``)
-and enforces each per its ``enforcement`` (§3 ADR fidelity ladder):
+Loads accepted house rules from ``house-rules/*.yml`` and enforces each per its
+``enforcement`` (§3 ADR fidelity ladder):
 
   * ``advisory``      → rung 2 only. A premise injected into grilling / ``/feature``;
                         not gated here. Reported so the engineer sees the house rules.
-  * ``deterministic`` → run the ADR's ``gate:`` script; a nonzero exit FAILS the build.
+  * ``deterministic`` → run the rule's ``gate:`` script; a nonzero exit FAILS the build.
   * ``semantic``      → needs an LLM reviewer (freshness-review's sibling). Reported as
                         an advisory notice here; the actual check runs in /code-review.
 
-Only ``status: accepted`` constraints are enforced. Record ADRs and proposed/superseded
-constraints are inert.
+Only ``status: accepted`` rules are enforced. Proposed/superseded rules are inert.
 
 Gate-script contract (deterministic): the script is run from the repo root with
 ``GITHUB_WORKSPACE`` set to the root; ``*.py`` gates run under the current interpreter,
-anything else is executed directly. Exit 0 = constraint holds, nonzero = violated. A
-``gate:`` that is missing on disk — or a ``deterministic`` ADR with no ``gate:`` at all —
-fails closed (a constraint that claims to be enforced but can't run is broken, not green).
+anything else is executed directly. Exit 0 = rule holds, nonzero = violated. A
+``gate:`` that is missing on disk — or a ``deterministic`` rule with no ``gate:`` at
+all — fails closed (a rule that claims to be enforced but can't run is broken, not green).
 
 Usage: python3 check_constraints.py [--root DIR]
 """
@@ -29,13 +28,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from extract import adr_nodes
+from extract import house_rules_nodes
 
 ENFORCEMENTS = ("advisory", "semantic", "deterministic")
 
 
 def run_gate(root: Path, gate_rel: str) -> tuple[bool, str]:
-    """Run a constraint's gate script from ``root``. Returns ``(ok, detail)``."""
+    """Run a rule's gate script from ``root``. Returns ``(ok, detail)``."""
     gate_abs = (root / gate_rel)
     if not gate_abs.exists():
         return False, f"gate script not found: {gate_rel}"
@@ -51,19 +50,18 @@ def run_gate(root: Path, gate_rel: str) -> tuple[bool, str]:
 
 
 def check_constraints(root: Path) -> dict:
-    """Evaluate accepted constraint ADRs. Returns a result dict with failures,
+    """Evaluate accepted house rules. Returns a result dict with failures,
     advisory notices (advisory + semantic), and counts."""
-    constraints = [
-        n for n in adr_nodes(root)
-        if n["facts"].get("kind") == "constraint"
-        and (n["facts"].get("status") or "").lower() == "accepted"
+    rules = [
+        n for n in house_rules_nodes(root)
+        if (n["facts"].get("status") or "").lower() == "accepted"
     ]
     failures: list[tuple[str, str, str]] = []   # (id, title, reason)
     advisories: list[tuple[str, str, str]] = []  # (id, title, enforcement)
     checked = 0
-    for adr in constraints:
-        facts = adr["facts"]
-        ref, title = adr["id"], adr["title"]
+    for rule in rules:
+        facts = rule["facts"]
+        ref, title = rule["id"], rule["title"]
         enf = (facts.get("enforcement") or "advisory").lower()
         if enf == "advisory":
             advisories.append((ref, title, "advisory"))
@@ -84,7 +82,7 @@ def check_constraints(root: Path) -> dict:
         "failures": failures,
         "advisories": advisories,
         "checked": checked,
-        "total": len(constraints),
+        "total": len(rules),
     }
 
 
@@ -98,23 +96,23 @@ def main() -> int:
     advisories, failures = result["advisories"], result["failures"]
 
     if advisories:
-        print("House rules (constraint ADRs — premises, not gated here):")
+        print("House rules (forward-looking premises, not gated here):")
         for ref, title, enf in advisories:
             tail = " — needs LLM review (intended for /code-review; not yet wired)" if enf == "semantic" else ""
             print(f"  • [{enf}] {title}  `{ref}`{tail}")
         print()
 
     if failures:
-        print("Constraint check FAILED:\n")
+        print("House-rule check FAILED:\n")
         for ref, title, reason in failures:
             print(f"  ✗ {title}  `{ref}`")
             for line in (reason or "").splitlines() or ["(no detail)"]:
                 print(f"      {line}")
-        print(f"\n{len(failures)} constraint(s) violated. A constraint ADR can't regress.")
+        print(f"\n{len(failures)} house rule(s) violated. A house rule can't regress.")
         return 1
 
-    print(f"Constraint check passed ✓  "
-          f"({result['checked']} deterministic gate(s) run, {result['total']} accepted constraint(s))")
+    print(f"House-rule check passed ✓  "
+          f"({result['checked']} deterministic gate(s) run, {result['total']} accepted rule(s))")
     return 0
 
 

@@ -32,9 +32,10 @@ def _brain(revision: str = "") -> Brain:
 
 @mcp.tool()
 def overview(revision: str = "") -> dict:
-    """Get a high-level map of the codebase: entity/flag/decision counts, modules,
-    flags, ADRs. Call first. SQLite brains include storage=sqlite and available
-    revisions. Use revision= to query a release tag instead of main."""
+    """Get a high-level map of the codebase: entity/flag/decision/house-rule counts,
+    modules, flags, ADRs, and house rules. Call first. SQLite brains include
+    storage=sqlite and available revisions. Use revision= to query a release tag instead
+    of main."""
     return _brain(revision).overview()
 
 
@@ -70,10 +71,17 @@ def neighbors(id: str, revision: str = "") -> dict:
 
 
 @mcp.tool()
-def list_decisions(source: str = "", revision: str = "", kind: str = "") -> list:
-    """List ADRs with status, kind, and one-line summary. Pass kind='constraint'
-    for the house rules (forward-looking premises) or 'record' for retrospective ADRs."""
-    return _brain(revision).decisions(source=source or None, kind=kind or None)
+def list_house_rules(revision: str = "") -> list:
+    """List active house rules with status, enforcement, and one-line summary.
+    House rules are forward-looking premises from house-rules/*.yml; accepted rules are
+    enforced by the constraint gate."""
+    return _brain(revision).house_rules()
+
+
+@mcp.tool()
+def list_decisions(revision: str = "") -> list:
+    """List ADRs (retrospective architecture decision records) with status and summary."""
+    return _brain(revision).decisions()
 
 
 @mcp.tool()
