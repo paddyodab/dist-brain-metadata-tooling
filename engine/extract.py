@@ -111,6 +111,10 @@ def extract_file(path: Path, root: Path) -> tuple[list[dict], list[dict]]:
             edges.append({"from": node_id, "to": f"exception:{exc}", "type": "raises", "origin": "derived"})
         if flag:
             edges.append({"from": node_id, "to": f"flag:{flag}", "type": "gated-by", "origin": "authored"})
+        for adapts in tags.get("adapts", []):
+            target = adapts.split()[0] if adapts.split() else ""
+            if target:
+                edges.append({"from": node_id, "to": target, "type": "adapts", "origin": "authored"})
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

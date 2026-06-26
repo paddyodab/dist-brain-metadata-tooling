@@ -1,0 +1,22 @@
+context: frontend
+kind: component
+valid_tags:
+  intent:
+    required: true
+    description: "What this component guarantees and why it exists"
+  feature:
+    required: false
+    description: "Feature flag controlling this component"
+  flag:
+    required: false
+    description: "Shortcut alias for a feature flag"
+  props:
+    required: auto
+    description: "Component props"
+  renders:
+    required: true
+    description: "What the component renders and under what conditions"
+  state:
+    required: false
+    description: "Internal state and effects"
+glossary_file: CONTEXT.md

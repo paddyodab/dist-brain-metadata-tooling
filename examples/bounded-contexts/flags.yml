@@ -1,0 +1,14 @@
+flags:
+  enable_drop_date:
+    description: Show the new DropDate column in line-item listings.
+    default: false
+    owner: backend
+  show_cart_badge:
+    description: Render the CartBadge in the site header.
+    default: true
+    owner: frontend
+
+  enable_order_notifications:
+    description: Notify the frontend when a backend order changes state.
+    default: false
+    owner: adapter

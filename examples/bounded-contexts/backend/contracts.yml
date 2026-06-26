@@ -1,0 +1,25 @@
+context: backend
+kind: service
+valid_tags:
+  intent:
+    required: true
+    description: "What this function guarantees and why it exists"
+  feature:
+    required: false
+    description: "Feature flag controlling this function"
+  flag:
+    required: false
+    description: "Shortcut alias for a feature flag"
+  param:
+    required: auto
+    description: "Parameter name and type"
+  returns:
+    required: auto
+    description: "Return type and shape"
+  raises:
+    required: false
+    description: "Exceptions this function can raise"
+  adapts:
+    required: false
+    description: "Target entity this function adapts to (cross-context boundary)"
+glossary_file: CONTEXT.md
