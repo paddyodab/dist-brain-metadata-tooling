@@ -84,6 +84,39 @@ def is_sediment_intent(name: str, intent: str) -> bool:
     return True
 
 
+# Glossary-aware intent density check. A domain term is a CamelCase/PascalCase token
+# (or multi-word phrase) that appears in the context's CONTEXT.md glossary.
+_TERM_RE = re.compile(r"[A-Za-z]+")
+
+
+def is_low_signal_intent(intent: str, glossary_terms: set[tuple[str, ...]]) -> bool:
+    """True if @intent contains no domain terms from the context's glossary.
+
+    Flags vague, generic prose like "handles the request" or "processes the data"
+    that do not anchor the intent in the bounded context's ubiquitous language.
+    Heuristic and ADVISORY: a missing @intent is the gate's job, not this lint's.
+    """
+    intent = (intent or "").strip()
+    if not intent:
+        return False
+    seen: set[tuple[str, ...]] = set()
+    for m in _TERM_RE.finditer(intent):
+        word = m.group(0)
+        # Domain terms carry a capital letter; all-lowercase words are grammar/filler.
+        if not any(c.isupper() for c in word):
+            continue
+        low = word.lower()
+        if low in _FILLER or _stem(low) in _FILLER_STEMS:
+            continue
+        normalized = tuple(_stem(w) for w in _words(word) if w)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        if normalized in glossary_terms:
+            return False  # at least one glossary domain term found → not low-signal
+    return True
+
+
 def parse_tags(docstring: str) -> dict[str, list[str]]:
     tags: dict[str, list[str]] = {}
     current = None

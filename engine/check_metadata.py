@@ -35,6 +35,7 @@ from contract_lib import (
     _words,
     collect_contracts,
     documented_params,
+    is_low_signal_intent,
     is_sediment_intent,
     parse_tags,
     raised_types,
@@ -293,6 +294,31 @@ def sediment_report(root: Path, src_root: Path, fail: bool) -> int:
     return 1 if fail else 0
 
 
+def signal_report(root: Path, src_root: Path, fail: bool) -> int:
+    """Advisory signal lint: flag @intent that contains no domain terms from the
+    context's CONTEXT.md glossary. Vague prose like 'handles the request' is a
+    candidate for re-ratification; it does not break the build."""
+    contracts = collect_contracts(src_root, root)
+    flagged: list[FunctionContract] = []
+    for c in contracts:
+        if not c.intent:
+            continue
+        context = resolve_context(root / c.rel_path, root)
+        terms = _load_glossary_terms(glossary_path(root, context))
+        if not terms:
+            continue  # no glossary → no signal check for this context
+        if is_low_signal_intent(c.intent, terms):
+            flagged.append(c)
+    if not flagged:
+        print(f"Signal lint: all intents carry domain terms ✓  ({len(contracts)} contract(s) scanned)")
+        return 0
+    print("Signal lint — @intent is too vague (no glossary domain terms). Add bounded-context meaning:\n")
+    for c in flagged:
+        print(f'  ⚠ {c.loc}: @intent "{c.intent}" adds no domain term')
+    tail = "Failing (--fail-on-low-signal)." if fail else "Advisory — not a build break."
+    print(f"\n{len(flagged)} low-signal of {len(contracts)} scanned. {tail}")
+    return 1 if fail else 0
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.environ.get("GITHUB_WORKSPACE") or ".")
@@ -302,6 +328,10 @@ def main() -> int:
                     help="advisory: flag @intent that merely restates the name (sediment)")
     ap.add_argument("--fail-on-sediment", action="store_true",
                     help="with --no-op-lint, exit non-zero on findings")
+    ap.add_argument("--signal-lint", action="store_true",
+                    help="advisory: flag @intent that contains no domain terms from the glossary")
+    ap.add_argument("--fail-on-low-signal", action="store_true",
+                    help="with --signal-lint, exit non-zero on findings")
     ap.add_argument("--since", default=None,
                     help="boy-scout mode: gate only functions changed since this git ref")
     ap.add_argument("--changed", action="append", default=None,
@@ -315,6 +345,9 @@ def main() -> int:
 
     if args.no_op_lint:
         return sediment_report(root, src_root, args.fail_on_sediment)
+
+    if args.signal_lint:
+        return signal_report(root, src_root, args.fail_on_low_signal)
 
     flags_path = Path(args.flags).resolve() if args.flags else root / "flags.yml"
     known_flags = set(load_flags(flags_path))

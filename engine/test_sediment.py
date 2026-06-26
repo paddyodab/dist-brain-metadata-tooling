@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import unittest
 
-from contract_lib import is_sediment_intent
+from contract_lib import is_low_signal_intent, is_sediment_intent
+
+
+GLOSSARY_TERMS: set[tuple[str, ...]] = {
+    ("cart",),
+    ("line", "item"),
+    ("ship", "window"),
+}
 
 
 class SedimentTests(unittest.TestCase):
@@ -29,6 +36,27 @@ class SedimentTests(unittest.TestCase):
         # missing @intent is the gate's job, not the sediment lint's
         self.assertFalse(is_sediment_intent("get_user", ""))
         self.assertFalse(is_sediment_intent("get_user", "   "))
+
+
+class LowSignalTests(unittest.TestCase):
+    def test_vague_intent_is_low_signal(self) -> None:
+        self.assertTrue(is_low_signal_intent("handles the request", GLOSSARY_TERMS))
+        self.assertTrue(is_low_signal_intent("processes the data", GLOSSARY_TERMS))
+        self.assertTrue(is_low_signal_intent("does the thing", GLOSSARY_TERMS))
+
+    def test_intent_with_glossary_term_is_not_low_signal(self) -> None:
+        self.assertFalse(is_low_signal_intent(
+            "Returns the Cart's LineItems sorted by ShipWindow", GLOSSARY_TERMS))
+        self.assertFalse(is_low_signal_intent(
+            "Ships the LineItem via the Cart", GLOSSARY_TERMS))
+
+    def test_empty_intent_is_not_low_signal(self) -> None:
+        # missing @intent is the gate's job, not the signal lint's
+        self.assertFalse(is_low_signal_intent("", GLOSSARY_TERMS))
+        self.assertFalse(is_low_signal_intent("   ", GLOSSARY_TERMS))
+
+    def test_no_glossary_terms_means_everything_is_low_signal(self) -> None:
+        self.assertTrue(is_low_signal_intent("Returns the Cart's LineItems sorted by ShipWindow", set()))
 
 
 if __name__ == "__main__":
