@@ -19,6 +19,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from context_resolver import resolve_context
 from flags_registry import load_flags
 
 LANG = "python"
@@ -81,6 +82,7 @@ def extract_file(path: Path, root: Path) -> tuple[list[dict], list[dict]]:
     edges: list[dict] = []
     rel = path.relative_to(root)
     subsystem = f"{LANG}:{path.stem}"
+    context = resolve_context(path, root)
 
     def handle(fn, qual: str, kind: str) -> None:
         if fn.name.startswith("_"):
@@ -103,6 +105,7 @@ def extract_file(path: Path, root: Path) -> tuple[list[dict], list[dict]]:
             "provenance": {"source_path": str(rel),
                            "source_sha": hashlib.sha1(segment.encode()).hexdigest()[:12],
                            "status": "verified", "extracted_by": "py-extractor@1"},
+            "context": context,
         })
         for exc in raises:
             edges.append({"from": node_id, "to": f"exception:{exc}", "type": "raises", "origin": "derived"})
@@ -160,6 +163,7 @@ def adr_nodes(root: Path) -> list[dict]:
         status = next(
             (l.split("**Status:**", 1)[1].strip()
              for l in lines if "**Status:**" in l), None)
+        context = resolve_context(f, root)
         out.append({
             "id": f"decision:{f.stem}", "type": "decision", "title": title,
             "intent": adr_summary(raw),
@@ -168,6 +172,7 @@ def adr_nodes(root: Path) -> list[dict]:
             "provenance": {"source_path": str(f.relative_to(root)),
                            "source_sha": hashlib.sha1(raw.encode()).hexdigest()[:12],
                            "status": "verified", "extracted_by": "adr@1"},
+            "context": context,
         })
     return out
 
