@@ -9,6 +9,7 @@ break the "don't boil the ocean" adoption ramp). Needs git; skips if unavailable
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -261,6 +262,128 @@ def no_param(user_id):
         f.write_text(PY_BACKEND_GOOD)
         errs = check_metadata.check_file(f, self.root, set())
         self.assertEqual(errs, [])
+
+
+BACKEND_GLOSSARY_CONTRACTS = '''\
+context: backend
+kind: service
+valid_tags:
+  intent:
+    required: true
+  param:
+    required: false
+  returns:
+    required: false
+'''
+
+
+class GlossaryAutoProposeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.backend = self.root / "backend"
+        self.backend.mkdir()
+        (self.backend / "CONTEXT.md").write_text("""\
+# Backend
+
+## Glossary
+
+### Cart
+A shopping cart.
+
+### LineItem
+An item in a cart.
+""")
+        (self.backend / "contracts.yml").write_text(BACKEND_GLOSSARY_CONTRACTS)
+        (self.root / "flags.yml").write_text("flags: {}\n")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_unknown_term_surfaces_proposal(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text('''\
+def list_items(cart):
+    """List items.
+
+    @intent Returns the Cart's LineItems sorted by the ShipWindow's earliest date.
+    @param cart
+    """
+    return []
+''')
+        proposals = check_metadata.glossary_terms(f, self.root)
+        self.assertEqual(len(proposals), 1)
+        self.assertIn("ShipWindow", proposals[0])
+        self.assertIn("backend/svc.py:", proposals[0])
+
+    def test_known_terms_produce_no_proposals(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text('''\
+def list_items(cart):
+    """List items.
+
+    @intent Returns the Cart's LineItems.
+    @param cart
+    """
+    return []
+''')
+        proposals = check_metadata.glossary_terms(f, self.root)
+        self.assertEqual(proposals, [])
+
+    def test_no_context_md_means_no_glossary_check(self) -> None:
+        src = self.root / "src"
+        src.mkdir()
+        f = src / "legacy.py"
+        f.write_text('''\
+def list_items(cart):
+    """List items.
+
+    @intent Uses ShipWindow.
+    """
+    return []
+''')
+        proposals = check_metadata.glossary_terms(f, self.root)
+        self.assertEqual(proposals, [])
+
+    def test_gate_does_not_fail_on_unknown_terms(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text('''\
+def list_items(cart):
+    """List items.
+
+    @intent Returns the Cart's LineItems sorted by the ShipWindow's earliest date.
+    @param cart
+    """
+    return []
+''')
+        result = subprocess.run(
+            [sys.executable, str(Path(check_metadata.__file__).resolve()),
+             "--root", str(self.root), "--src", str(self.backend)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Proposed glossary term:", result.stdout)
+        self.assertIn("ShipWindow", result.stdout)
+        self.assertIn("Advisory", result.stdout)
+
+    def test_all_terms_known_no_proposals_in_main(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text('''\
+def list_items(cart):
+    """List items.
+
+    @intent Returns the Cart's LineItems.
+    @param cart
+    """
+    return []
+''')
+        result = subprocess.run(
+            [sys.executable, str(Path(check_metadata.__file__).resolve()),
+             "--root", str(self.root), "--src", str(self.backend)],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("Proposed glossary term:", result.stdout)
 
 
 if __name__ == "__main__":

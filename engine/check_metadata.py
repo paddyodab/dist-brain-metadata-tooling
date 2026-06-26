@@ -23,11 +23,16 @@ import argparse
 import ast
 import hashlib
 import os
+import re
 import subprocess
 from pathlib import Path
 
-from context_resolver import contracts_path, resolve_context
+from context_resolver import contracts_path, glossary_path, resolve_context
 from contract_lib import (
+    _FILLER,
+    _FILLER_STEMS,
+    _stem,
+    _words,
     collect_contracts,
     documented_params,
     is_sediment_intent,
@@ -49,6 +54,51 @@ DEFAULT_TAGS: dict[str, dict] = {
     "feature": {"required": "false"},
     "flag": {"required": "false"},
 }
+
+
+_HEADING_RE = re.compile(r"^#{1,4}\s+(.+)$")
+_TERM_WORD_RE = re.compile(r"[A-Za-z]+")
+
+
+def _load_glossary_terms(path: Path) -> set[tuple[str, ...]]:
+    """Return normalized (stemmed, lowercased) term token tuples from a CONTEXT.md.
+
+    Terms are taken from markdown headings. A heading like ``### ShipWindow`` or
+    ``### Line item`` becomes a set of tokens used to decide whether an @intent
+    word is already defined in the context's glossary.
+    """
+    if not path.exists():
+        return set()
+    terms: set[tuple[str, ...]] = set()
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        m = _HEADING_RE.match(line)
+        if not m:
+            continue
+        title = m.group(1).strip()
+        # Strip inline markdown decoration; domain terms rarely contain it.
+        title = re.sub(r"[*`\[\]]", "", title)
+        tokens = tuple(_stem(w) for w in _words(title) if w)
+        if not tokens:
+            continue
+        terms.add(tokens)
+    return terms
+
+
+def _is_term_candidate(word: str) -> bool:
+    """True for a likely domain term in @intent prose.
+
+    Filters out short words, plain filler, and all-lowercase words (which are
+    usually grammar, not ubiquitous-language concepts).
+    """
+    if len(word) <= 1:
+        return False
+    if not any(c.isupper() for c in word):
+        return False
+    low = word.lower()
+    if low in _FILLER or _stem(low) in _FILLER_STEMS:
+        return False
+    return True
 
 
 def _funcs(tree: ast.AST) -> list[tuple[ast.AST, str]]:
@@ -122,6 +172,56 @@ def check_file(path: Path, root: Path, known_flags: set[str],
             if flag not in known_flags:
                 errors.append(f"{loc}: @flag {flag!r} is not defined in flags.yml")
     return errors
+
+
+def glossary_terms(path: Path, root: Path) -> list[str]:
+    """Advisory glossary check: propose domain terms used in @intent but not yet
+    defined in the nearest CONTEXT.md. Returns proposal strings, never failures."""
+    context = resolve_context(path, root)
+    terms = _load_glossary_terms(glossary_path(root, context))
+    if not terms:
+        return []
+
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        rel = path
+
+    proposals: list[str] = []
+    tree = ast.parse(path.read_text(), filename=str(path))
+    for fn, qual in _funcs(tree):
+        if fn.name.startswith("_"):
+            continue
+        doc = ast.get_docstring(fn)
+        if not doc:
+            continue
+        tags = parse_tags(doc)
+        intent = " ".join(tags.get("intent", [])).strip()
+        if not intent:
+            continue
+        seen: set[str] = set()
+        for m in _TERM_WORD_RE.finditer(intent):
+            word = m.group(0)
+            if not _is_term_candidate(word):
+                continue
+            normalized = tuple(_stem(w) for w in _words(word) if w)
+            if not normalized or normalized in terms:
+                continue
+            if word in seen:
+                continue
+            seen.add(word)
+            loc = f"{rel}:{fn.lineno}"
+            proposals.append(f"Proposed glossary term: {word} (in {loc})")
+    return proposals
+
+
+def _print_glossary_report(proposals: list[str]) -> None:
+    if not proposals:
+        return
+    print("\nGlossary check — @intent uses terms not yet in CONTEXT.md. Ratify or reject at review:\n")
+    for p in proposals:
+        print(f"  ⚠ {p}")
+    print(f"\n{len(proposals)} proposed term(s). Advisory — not a build break.")
 
 
 def _under(path: Path, parent: Path) -> bool:
@@ -220,24 +320,38 @@ def main() -> int:
     known_flags = set(load_flags(flags_path))
 
     scoped = bool(args.since or args.changed or args.include_working)
+    proposal_files: list[Path] = []
     if scoped:
+        changed, _deleted = git_changed_paths(root, args.since, args.include_working)
+        if args.changed:
+            changed |= set(args.changed)
+        proposal_files = [root / rel for rel in sorted(changed)
+                          if rel.endswith(".py") and (root / rel).exists()
+                          and _under(root / rel, src_root)]
         errors = scoped_check(root, src_root, known_flags, args.since, args.include_working,
                               changed=set(args.changed) if args.changed else None)
         scope_desc = f"diff-scoped (since {args.since or 'HEAD'})"
     else:
+        proposal_files = sorted(src_root.rglob("*.py"))
         errors = []
-        files = sorted(src_root.rglob("*.py"))
-        for f in files:
+        for f in proposal_files:
             errors.extend(check_file(f, root, known_flags))
-        scope_desc = f"{len(files)} file(s)"
+        scope_desc = f"{len(proposal_files)} file(s)"
+
+    proposals: list[str] = []
+    for f in proposal_files:
+        proposals.extend(glossary_terms(f, root))
 
     if errors:
         print("Metadata contract check FAILED:\n")
         for e in errors:
             print(f"  ✗ {e}")
         print(f"\n{len(errors)} problem(s). Stale metadata is a build failure.")
+        if proposals:
+            _print_glossary_report(proposals)
         return 1
     print(f"Metadata contract check passed ✓  ({scope_desc}, {len(known_flags)} flag(s))")
+    _print_glossary_report(proposals)
     return 0
 
 
