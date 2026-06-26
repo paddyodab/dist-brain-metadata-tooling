@@ -113,5 +113,155 @@ class BoyScoutGateTests(unittest.TestCase):
         self.assertIn("also_bad()", blob)
 
 
+PY_BACKEND_GOOD = '''\
+def get_user(user_id):
+    """Fetch a user.
+
+    @intent Returns the User for the given id.
+    @param user_id int
+    @returns User
+    """
+    return {"id": user_id}
+'''
+
+PY_BACKEND_INVALID_TAG = '''\
+def render_user(user_id):
+    """Render hook (invalid in backend).
+
+    @intent Returns user id.
+    @param user_id int
+    @renders user_id
+    """
+    return user_id
+'''
+
+PY_FRONTEND_GOOD = '''\
+def UserCard():
+    """React component.
+
+    @intent Renders the UserCard for the given User.
+    @renders JSX
+    """
+    return None
+'''
+
+PY_FRONTEND_INVALID_TAG = '''\
+def user_raises(props):
+    """Bad tag.
+
+    @intent Renders nothing.
+    @props props
+    @raises ValueError
+    """
+    raise ValueError
+'''
+
+
+@unittest.skipUnless(_have_git(), "git not available")
+class ContextAwareGateTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.dir.name)
+        self.backend = self.root / "backend"
+        self.frontend = self.root / "frontend"
+        self.backend.mkdir()
+        self.frontend.mkdir()
+        (self.backend / "CONTEXT.md").write_text("# Backend\n")
+        (self.frontend / "CONTEXT.md").write_text("# Frontend\n")
+        (self.backend / "contracts.yml").write_text("""\
+context: backend
+kind: service
+valid_tags:
+  intent:
+    required: true
+  param:
+    required: auto
+  returns:
+    required: auto
+  raises:
+    required: false
+""")
+        (self.frontend / "contracts.yml").write_text("""\
+context: frontend
+kind: component
+valid_tags:
+  intent:
+    required: true
+  props:
+    required: auto
+  renders:
+    required: true
+""")
+        (self.root / "flags.yml").write_text("flags: {}\n")
+
+    def tearDown(self) -> None:
+        self.dir.cleanup()
+
+    def test_backend_valid_tag_passes(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text(PY_BACKEND_GOOD)
+        errs = check_metadata.check_file(f, self.root, set())
+        self.assertEqual(errs, [])
+
+    def test_backend_invalid_tag_fails(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text(PY_BACKEND_INVALID_TAG)
+        errs = check_metadata.check_file(f, self.root, set())
+        blob = "\n".join(errs)
+        self.assertIn("@renders is not a valid tag in context 'backend'", blob)
+
+    def test_frontend_valid_tag_passes(self) -> None:
+        f = self.frontend / "cmp.py"
+        f.write_text(PY_FRONTEND_GOOD)
+        errs = check_metadata.check_file(f, self.root, set())
+        self.assertEqual(errs, [])
+
+    def test_frontend_invalid_tag_fails(self) -> None:
+        f = self.frontend / "cmp.py"
+        f.write_text(PY_FRONTEND_INVALID_TAG)
+        errs = check_metadata.check_file(f, self.root, set())
+        blob = "\n".join(errs)
+        self.assertIn("@raises is not a valid tag in context 'frontend'", blob)
+
+    def test_frontend_required_renders_missing_fails(self) -> None:
+        """@renders is required: true in frontend contracts."""
+        f = self.frontend / "cmp.py"
+        f.write_text('''\
+def UserCard():
+    """Missing renders.
+
+    @intent Renders the UserCard.
+    """
+    pass
+''')
+        errs = check_metadata.check_file(f, self.root, set())
+        blob = "\n".join(errs)
+        self.assertIn("missing required @renders (context: frontend)", blob)
+
+    def test_required_auto_param_missing(self) -> None:
+        f = self.backend / "svc.py"
+        f.write_text('''\
+def no_param(user_id):
+    """Missing @param.
+
+    @intent Returns user.
+    @returns dict
+    """
+    return {"id": user_id}
+''')
+        errs = check_metadata.check_file(f, self.root, set())
+        blob = "\n".join(errs)
+        self.assertIn("@param missing for ['user_id']", blob)
+
+    def test_no_contracts_falls_back_to_default_tags(self) -> None:
+        """A repo with no CONTEXT.md/contracts.yml still uses today's hardcoded tags."""
+        src = self.root / "src"
+        src.mkdir()
+        f = src / "legacy.py"
+        f.write_text(PY_BACKEND_GOOD)
+        errs = check_metadata.check_file(f, self.root, set())
+        self.assertEqual(errs, [])
+
+
 if __name__ == "__main__":
     unittest.main()

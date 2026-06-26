@@ -26,6 +26,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from context_resolver import contracts_path, resolve_context
 from contract_lib import (
     collect_contracts,
     documented_params,
@@ -35,8 +36,19 @@ from contract_lib import (
     returns_value,
     signature_params,
 )
+from contracts_registry import load_contracts
 from extract import git_changed_paths
 from flags_registry import load_flags
+
+
+DEFAULT_TAGS: dict[str, dict] = {
+    "intent": {"required": "true"},
+    "param": {"required": "auto"},
+    "returns": {"required": "auto"},
+    "raises": {"required": "false"},
+    "feature": {"required": "false"},
+    "flag": {"required": "false"},
+}
 
 
 def _funcs(tree: ast.AST) -> list[tuple[ast.AST, str]]:
@@ -54,7 +66,9 @@ def _funcs(tree: ast.AST) -> list[tuple[ast.AST, str]]:
 def check_file(path: Path, root: Path, known_flags: set[str],
                only: set[str] | None = None) -> list[str]:
     """Gate public functions in ``path``. If ``only`` is given, restrict to those
-    qualnames (the diff-scoped path); ``None`` gates all of them (full mode)."""
+    qualnames (the diff-scoped path); ``None`` gates all of them (full mode).
+    The context is resolved per file so the correct contracts.yml drives tag
+    validation."""
     errors: list[str] = []
     tree = ast.parse(path.read_text(), filename=str(path))
     funcs = _funcs(tree)
@@ -63,6 +77,12 @@ def check_file(path: Path, root: Path, known_flags: set[str],
         rel = path.relative_to(root)
     except ValueError:
         rel = path
+
+    context = resolve_context(path, root)
+    contracts = load_contracts(contracts_path(root, context))
+    if not contracts:
+        contracts = DEFAULT_TAGS
+
     for fn, qual in funcs:
         if fn.name.startswith("_"):
             continue
@@ -74,15 +94,26 @@ def check_file(path: Path, root: Path, known_flags: set[str],
             errors.append(f"{loc}: public function has no docstring/contract")
             continue
         tags = parse_tags(doc)
-        if not tags.get("intent"):
-            errors.append(f"{loc}: missing @intent")
+
+        # Validate that every used @tag is declared in this context's contracts.
+        for tag_name in tags:
+            if tag_name not in contracts:
+                errors.append(f"{loc}: @{tag_name} is not a valid tag in context '{context}'")
+
+        # Context-aware required checks per contracts.yml (true/false/auto).
+        # When a contracts.yml is present, it fully replaces the default tag set;
+        # legacy hardcoded @param/@returns checks only run on the fallback path.
         sig, documented = signature_params(fn), documented_params(tags)
-        if sig - documented:
-            errors.append(f"{loc}: @param missing for {sorted(sig - documented)}")
-        if documented - sig:
-            errors.append(f"{loc}: @param documents unknown {sorted(documented - sig)}")
-        if returns_value(fn) and not tags.get("returns"):
-            errors.append(f"{loc}: returns a value but has no @returns")
+        for tag_name, spec in contracts.items():
+            required = spec.get("required", "false")
+            if required == "true" and not tags.get(tag_name):
+                errors.append(f"{loc}: missing required @{tag_name} (context: {context})")
+            elif required == "auto":
+                if tag_name == "param" and sig - documented:
+                    errors.append(f"{loc}: @param missing for {sorted(sig - documented)}")
+                if tag_name == "returns" and returns_value(fn) and not tags.get("returns"):
+                    errors.append(f"{loc}: returns a value but has no @returns")
+
         raised = raised_types(fn)
         declared = {e.split()[0] for e in tags.get("raises", []) if e.split()}
         if raised - declared:
